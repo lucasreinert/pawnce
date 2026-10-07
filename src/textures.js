@@ -90,13 +90,16 @@ function drawRoof(ctx, w, h) {
   ctx.strokeStyle = PALETTE.roof;
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(90, ROOF_TOP);
-  ctx.lineTo(90, 22);
-  ctx.moveTo(72, 36);
-  ctx.lineTo(108, 36);
+  // antena a ~1/5 da largura e chaminé a 3/4 (acompanham a largura do jogo)
+  const ax = Math.round(w * 0.19);
+  const cx = Math.round(w * 0.75);
+  ctx.moveTo(ax, ROOF_TOP);
+  ctx.lineTo(ax, 22);
+  ctx.moveTo(ax - 18, 36);
+  ctx.lineTo(ax + 18, 36);
   ctx.stroke();
-  ctx.fillRect(360, 26, 40, ROOF_TOP - 26);
-  ctx.fillRect(355, 20, 50, 8);
+  ctx.fillRect(cx, 26, 40, ROOF_TOP - 26);
+  ctx.fillRect(cx - 5, 20, 50, 8);
   ctx.fillRect(0, ROOF_TOP, w, h - ROOF_TOP);
 }
 
@@ -106,9 +109,9 @@ function makeTextures(scene) {
   canvasTex(scene, 'sky', W, H, drawSky); // W e H vêm de src/game.js (a altura varia com a tela)
   canvasTex(scene, 'stars', 256, 256, drawStars);
   canvasTex(scene, 'moon', 140, 140, drawMoon);
-  canvasTex(scene, 'skyline_far', 480, 300, (ctx, w, h) => drawSkyline(ctx, w, h, PALETTE.cityFar, 120, 280, 0.35));
-  canvasTex(scene, 'skyline_near', 480, 220, (ctx, w, h) => drawSkyline(ctx, w, h, PALETTE.cityNear, 70, 200, 0.85));
-  canvasTex(scene, 'roof', 480, 260, drawRoof);
+  canvasTex(scene, 'skyline_far', W, 300, (ctx, w, h) => drawSkyline(ctx, w, h, PALETTE.cityFar, 120, 280, 0.35));
+  canvasTex(scene, 'skyline_near', W, 220, (ctx, w, h) => drawSkyline(ctx, w, h, PALETTE.cityNear, 70, 200, 0.85));
+  canvasTex(scene, 'roof', W, 260, drawRoof);
 
   canvasTex(scene, 'dot', 8, 8, (ctx) => {
     ctx.fillStyle = '#ffffff';

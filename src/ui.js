@@ -4,7 +4,7 @@
 // Textos do jogo. Para traduzir, basta trocar aqui (a fonte tem A–Z, 0–9 e  + - ! . : ?).
 const TEXT = {
   title: 'PAWNCE',
-  tagline: 'CATCH BIRDS. REACH THE MOON.',
+  tagline: 'CATCH BIRDS.\nREACH THE MOON.',
   tapToJump: 'TAP TO JUMP',
   dragToMove: 'DRAG TO MOVE',
   best: 'BEST',
@@ -155,7 +155,7 @@ function makeLogo(scene) {
 
 // Patinha ao lado do logo: almofadinhas rosa, mesmo contorno e borda das letras.
 // Desenhada já grande (PAW_PIXEL px por pixel) para poder ficar inclinada sem serrilhar.
-const PAW_PIXEL = 5;
+const PAW_PIXEL = 4;
 const PAW_GRADIENT = ['#ffd6e7', '#ffc2db', '#ffb0d0', '#ff9ec4', '#ff8cb9', '#f97aae', '#ee6aa2'];
 
 function makePaw(scene) {

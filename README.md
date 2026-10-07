@@ -19,9 +19,14 @@ em "PLAY AGAIN".
 
 ## Formato
 
-O jogo é em retrato, com 480 de largura. A altura acompanha o formato da tela (de 820 a 1100), então
-celulares mais alongados, como os iPhones atuais, ficam em tela cheia sem faixas pretas. No desktop
-aparece centralizado, com bordas nas laterais. Em tela cheia no iPhone, placar, frenesi e logo descem
+O jogo é em retrato, com 400 de largura (`W` em `src/game.js`). Como o jogo ocupa a largura da tela
+do celular, essa largura define o tamanho de tudo: quanto menor, maior aparecem gato, passarinhos e
+textos. As distâncias e velocidades foram afinadas com 480 de largura e são convertidas por
+`KS = W / 480`, então mudar `W` mantém o mesmo tempo de pulo e a mesma dificuldade.
+
+A altura acompanha o formato da tela (de 820 a 1100, em escala de 480), então celulares mais
+alongados, como os iPhones atuais, ficam em tela cheia sem faixas pretas. No desktop aparece
+centralizado, com bordas nas laterais. Em tela cheia no iPhone, placar, frenesi e logo descem
 o espaço do relógio/entalhe (`SAFE_TOP` em `src/game.js`).
 
 ## App instalável (PWA)

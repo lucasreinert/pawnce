@@ -1,8 +1,13 @@
 // Jogo em retrato (pensado para celular; no desktop aparece centralizado com bordas).
-const W = 480;
+// W é a largura do "mundo" do jogo, que ocupa a largura da tela do celular: quanto menor, maior tudo
+// aparece (gato, passarinhos, textos). 400 deixa tudo ~20% maior que os 480 originais.
+const W = 400;
+// As distâncias e velocidades abaixo foram afinadas com 480 de largura; KS converte para a largura
+// atual, mantendo o mesmo tempo de pulo e a mesma dificuldade.
+const KS = W / 480;
 // A altura acompanha o formato da tela: celulares mais alongados (iPhones atuais) ganham mais céu em
-// vez de faixas pretas. Telas mais largas (desktop, Poki) ficam no mínimo de 820.
-const H = Math.round(Phaser.Math.Clamp(W * (window.innerHeight / window.innerWidth), 820, 1100));
+// vez de faixas pretas. Telas mais largas (desktop, Poki) ficam no mínimo.
+const H = Math.round(Phaser.Math.Clamp(W * (window.innerHeight / window.innerWidth), 820 * KS, 1100 * KS));
 // Faixa do relógio/entalhe no topo quando o app roda em tela cheia no iPhone, em pixels do jogo.
 // A interface (placar, frenesi, logo) desce essa quantidade para não ficar embaixo dela.
 const SAFE_TOP = (() => {
@@ -13,29 +18,30 @@ const SAFE_TOP = (() => {
   probe.remove();
   return Math.round(px * (W / window.innerWidth));
 })();
-const GROUND_Y = H - 70;
+const GROUND_Y = H - Math.round(70 * KS);
 const CAT_R = 20;
 const CAT_SCALE = 1;         // a arte já vem no tamanho do jogo (~60px de altura)
 const CAMERA_ANCHOR = 0.55; // altura da tela (0 = topo) onde a câmera segura o gato
 
-// Dificuldade
-const CAT_SPEED = 560;       // velocidade horizontal máxima do gato
-const WALK_SPEED = 110;      // velocidade do passeio no telhado antes de começar
-const GAP_MIN = 150;         // distância vertical entre passarinhos...
-const GAP_MAX = 190;
-const GAP_GROW = 110;        // ...e quanto ela aumenta lá no alto
-const DX_MAX = 230;          // distância horizontal máxima entre passarinhos seguidos
+// Dificuldade (valores em "pixels de 480", convertidos por KS)
+const CAT_SPEED = 560 * KS;   // velocidade horizontal máxima do gato
+const WALK_SPEED = 110 * KS;  // velocidade do passeio no telhado antes de começar
+const GAP_MIN = 150 * KS;     // distância vertical entre passarinhos...
+const GAP_MAX = 190 * KS;
+const GAP_GROW = 110 * KS;    // ...e quanto ela aumenta lá no alto
+const DX_MAX = 230 * KS;      // distância horizontal máxima entre passarinhos seguidos
+const DIFF_HEIGHT = 20000 * KS; // altura em que a dificuldade chega ao máximo
 
-// Pulo alto: ~450px e quase 1s subindo, então sobra bastante tempo no ar entre um passarinho e outro.
-const GRAVITY = 1100;        // px/s²
-const BOUNCE_VY = -1000;     // impulso ao pegar um passarinho
-const GROUND_JUMP_VY = -900;
+// Pulo alto: ~450px (em 480) e quase 1s subindo, então sobra bastante tempo no ar entre um passarinho e outro.
+const GRAVITY = 1100 * KS;    // px/s²
+const BOUNCE_VY = -1000 * KS; // impulso ao pegar um passarinho
+const GROUND_JUMP_VY = -900 * KS;
 
 // Frenesi: a estrela roxa ativa uma trilha de passarinhos fáceis, pontos em dobro e pulo mais forte.
 const FRENZY_MS = 6000;
-const FRENZY_BOUNCE_VY = -1250;
+const FRENZY_BOUNCE_VY = -1250 * KS;
 const FRENZY_MULT = 2;
-const ORB_EVERY = [3500, 5000]; // intervalo de altura (px) entre uma estrela e outra
+const ORB_EVERY = [3500 * KS, 5000 * KS]; // intervalo de altura entre uma estrela e outra
 const STAR_R = 22;              // raio de coleta da estrela
 
 // Visual
@@ -166,9 +172,9 @@ class Game extends Phaser.Scene {
     this.birds = [];
     this.goldens = [];
     this.orbs = [];
-    this.nextY = GROUND_Y - 220;
+    this.nextY = GROUND_Y - 220 * KS;
     this.lastX = W / 2;
-    this.nextOrbY = GROUND_Y - Phaser.Math.Between(1800, 2400);
+    this.nextOrbY = GROUND_Y - Phaser.Math.FloatBetween(1800 * KS, 2400 * KS);
     this.frenzy = false;
     this.frenzyUntil = 0;
     this.trail = [];
@@ -264,10 +270,15 @@ class Game extends Phaser.Scene {
   createTitle() {
     const fix = (o) => o.setScrollFactor(0).setDepth(20);
     const letters = [...TEXT.title];
-    const scale = 7;
+    const scale = 6;
     const step = 8 * scale;
-    const x0 = W / 2 - ((letters.length - 1) * step) / 2 - 28; // um pouco para a esquerda, abrindo espaço para a patinha
-    const y0 = SAFE_TOP + 190;
+    // Letras + patinha centralizadas juntas na largura da tela
+    const letterW = LOGO_LETTER_W * scale;
+    const pawGap = 6;
+    const pawW = this.textures.get('logo_paw').getSourceImage().width;
+    const left = (W - ((letters.length - 1) * step + letterW + pawGap + pawW)) / 2;
+    const x0 = left + letterW / 2;
+    const y0 = SAFE_TOP + 170;
     this.title = [];
 
     letters.forEach((ch, i) => {
@@ -283,8 +294,8 @@ class Game extends Phaser.Scene {
     });
 
     // Patinha: cai grande e girada como um carimbo depois das letras, solta faíscas e fica balançando
-    const pawX = x0 + (letters.length - 1) * step + 66;
-    const pawY = y0 - 22;
+    const pawX = left + (letters.length - 1) * step + letterW + pawGap + pawW / 2;
+    const pawY = y0 - 18;
     const pawDelay = 150 + letters.length * 90 + 450;
     const paw = this.add.image(pawX, pawY, 'logo_paw').setScrollFactor(0).setDepth(21)
       .setScale(2.2).setAngle(34).setAlpha(0);
@@ -299,9 +310,9 @@ class Game extends Phaser.Scene {
     this.title.push(paw);
 
     const sub = [
-      fix(pixelText(this, W / 2, y0 + 64, TEXT.tagline, 2, 0xb9a8ff).setLetterSpacing(-1).setOrigin(0.5)),
+      fix(pixelText(this, W / 2, y0 + 74, TEXT.tagline, 2, 0xb9a8ff).setCenterAlign().setOrigin(0.5)),
     ];
-    if (this.best > 0) sub.push(fix(pixelText(this, W / 2, y0 + 94, `${TEXT.best} ${this.best}`, 2, 0xffd23f).setOrigin(0.5)));
+    if (this.best > 0) sub.push(fix(pixelText(this, W / 2, y0 + 120, `${TEXT.best} ${this.best}`, 2, 0xffd23f).setOrigin(0.5)));
     const tap = fix(pixelText(this, W / 2, H * 0.53, TEXT.tapToJump, 4).setOrigin(0.5));
     const drag = fix(pixelText(this, W / 2, H * 0.53 + 42, TEXT.dragToMove, 2, 0x9d99c9).setOrigin(0.5));
     sub.push(tap, drag);
@@ -351,7 +362,7 @@ class Game extends Phaser.Scene {
     const top = this.cameras.main.scrollY - 300;
     while (this.nextY > top) {
       const height = GROUND_Y - this.nextY;
-      const diff = Math.min(height / 20000, 1); // 0 → 1 conforme sobe
+      const diff = Math.min(height / DIFF_HEIGHT, 1); // 0 → 1 conforme sobe
 
       // Próximo passarinho longe do anterior, mas sempre alcançável.
       const dxMax = DX_MAX * (0.55 + 0.45 * diff);
@@ -367,16 +378,16 @@ class Game extends Phaser.Scene {
       // A arte fica sempre no mesmo tamanho (pixel art nítida); lá no alto só a área de captura diminui.
       bird.r = 17 * (1 - diff * 0.25);
       // Mais alto, mais passarinhos voam de um lado para o outro.
-      bird.vx = Math.random() < diff * 0.8 ? Phaser.Math.Between(40, 110) * (1 + diff) * (Math.random() < 0.5 ? -1 : 1) : 0;
+      bird.vx = Math.random() < diff * 0.8 ? Phaser.Math.FloatBetween(40, 110) * KS * (1 + diff) * (Math.random() < 0.5 ? -1 : 1) : 0;
       this.face(bird, bird.vx ? Math.sign(bird.vx) : (Math.random() < 0.5 ? -1 : 1));
       this.birds.push(bird);
 
-      const gap = Phaser.Math.Between(GAP_MIN, GAP_MAX) + diff * GAP_GROW;
-      if (height > 1200 && Math.random() < 0.06) this.spawnGolden(this.nextY - gap / 2);
+      const gap = Phaser.Math.FloatBetween(GAP_MIN, GAP_MAX) + diff * GAP_GROW;
+      if (height > 1200 * KS && Math.random() < 0.06) this.spawnGolden(this.nextY - gap / 2);
       // Estrela do frenesi no meio do caminho entre este passarinho e o próximo (nunca durante um frenesi)
       if (!this.frenzy && this.nextY < this.nextOrbY) {
-        this.spawnOrb(Phaser.Math.Clamp(x + Phaser.Math.Between(-70, 70), 40, W - 40), this.nextY - gap / 2);
-        this.nextOrbY -= Phaser.Math.Between(ORB_EVERY[0], ORB_EVERY[1]);
+        this.spawnOrb(Phaser.Math.Clamp(x + Phaser.Math.FloatBetween(-70, 70) * KS, 40, W - 40), this.nextY - gap / 2);
+        this.nextOrbY -= Phaser.Math.FloatBetween(ORB_EVERY[0], ORB_EVERY[1]);
       }
       this.nextY -= gap;
     }
@@ -386,7 +397,7 @@ class Game extends Phaser.Scene {
   spawnGolden(y) {
     const fromLeft = Math.random() < 0.5;
     const bird = this.makeBird(fromLeft ? -30 : W + 30, y, 'gold');
-    bird.vx = (fromLeft ? 1 : -1) * Phaser.Math.Between(160, 240);
+    bird.vx = (fromLeft ? 1 : -1) * Phaser.Math.FloatBetween(160, 240) * KS;
     bird.baseY = y;
     this.face(bird, fromLeft ? 1 : -1);
     this.goldens.push(bird);
@@ -425,7 +436,7 @@ class Game extends Phaser.Scene {
   // Trilha de passarinhos lilás logo acima do gato enquanto o frenesi dura.
   spawnBonusBirds(cam) {
     while (this.nextBonusY > cam.scrollY - 150) {
-      const x = Phaser.Math.Clamp(this.lastBonusX + Phaser.Math.FloatBetween(-110, 110), 40, W - 40);
+      const x = Phaser.Math.Clamp(this.lastBonusX + Phaser.Math.FloatBetween(-110, 110) * KS, 40, W - 40);
       this.lastBonusX = x;
       const bird = this.makeBird(x, this.nextBonusY, 'bonus');
       bird.baseX = x;
@@ -435,7 +446,7 @@ class Game extends Phaser.Scene {
       bird.setAlpha(0);
       this.tweens.add({ targets: bird, alpha: 1, duration: 200 });
       this.birds.push(bird);
-      this.nextBonusY -= Phaser.Math.Between(75, 100);
+      this.nextBonusY -= Phaser.Math.FloatBetween(75, 100) * KS;
     }
   }
 
@@ -450,7 +461,7 @@ class Game extends Phaser.Scene {
     // Antes de começar: o gato passeia pelo telhado, para e senta, e volta a andar.
     if (this.state === 'ready' && time > this.wanderAt) {
       let nx;
-      do { nx = Phaser.Math.Between(50, W - 50); } while (Math.abs(nx - this.cat.x) < 90);
+      do { nx = Phaser.Math.Between(50, W - 50); } while (Math.abs(nx - this.cat.x) < 90 * KS);
       this.targetX = nx;
       this.wanderAt = time + Phaser.Math.Between(3500, 5500);
     }
@@ -621,7 +632,7 @@ class Game extends Phaser.Scene {
 
     if (!this.frenzy) {
       this.frenzy = true;
-      this.nextBonusY = this.cat.y - 110;
+      this.nextBonusY = this.cat.y - 110 * KS;
       this.lastBonusX = this.cat.x;
       this.tweens.add({ targets: [this.frenzyTint, this.frenzyLabel], alpha: 1, duration: 300 });
     }
@@ -640,7 +651,7 @@ class Game extends Phaser.Scene {
     if (left <= 0) {
       this.frenzy = false;
       // A próxima estrela só aparece bem acima de onde o frenesi terminou
-      this.nextOrbY = Math.min(this.nextOrbY, this.nextY - Phaser.Math.Between(ORB_EVERY[0], ORB_EVERY[1]));
+      this.nextOrbY = Math.min(this.nextOrbY, this.nextY - Phaser.Math.FloatBetween(ORB_EVERY[0], ORB_EVERY[1]));
       Sfx.powerDown();
       Music.setIntense(false);
       this.tweens.add({ targets: [this.frenzyTint, this.frenzyLabel], alpha: 0, duration: 500 });
@@ -780,7 +791,7 @@ class Game extends Phaser.Scene {
     const overlay = fix(this.add.rectangle(0, 0, W, H, 0x05030f, 0.72).setOrigin(0)).setAlpha(0);
     this.tweens.add({ targets: overlay, alpha: 1, duration: 300 });
 
-    const cw = 380;
+    const cw = Math.min(380, W - 32);
     const chh = 370;
     const card = fix(this.add.graphics({ x: W / 2, y: cy }));
     card.fillStyle(0x07040f, 0.9).fillRoundedRect(-cw / 2, -chh / 2 + 8, cw, chh, 24); // sombra
@@ -797,7 +808,7 @@ class Game extends Phaser.Scene {
     text(-135, TEXT.gameOver, 4, 0xd59bff);
     text(-80, TEXT.score, 2, 0x8f88c0);
     const scoreStr = String(this.score);
-    text(-38, scoreStr, Phaser.Math.Clamp(Math.floor(320 / (scoreStr.length * 8)), 3, 6));
+    text(-38, scoreStr, Phaser.Math.Clamp(Math.floor((cw - 60) / (scoreStr.length * 8)), 3, 6));
     if (isRecord) {
       const nb = text(28, TEXT.newBest, 3, 0xffd23f);
       this.tweens.add({ targets: nb, scale: 3.3, delay: 700, duration: 450, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
