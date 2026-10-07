@@ -1,0 +1,14 @@
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Python (scripts em tools/)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Configuração local do editor/assistente
+.claude/
+.vscode/
