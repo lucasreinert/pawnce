@@ -2,8 +2,9 @@
 
 *paw* (patinha) + *pounce* (o bote do gato).
 
-Jogo estilo *Winter Bells* para a Poki: um gato sobe pelos telhados pulando de passarinho em
-passarinho. Feito com Phaser 3 + Poki SDK.
+Jogo estilo *Winter Bells*: um gato sobe pelos telhados pulando de passarinho em passarinho.
+Feito com Phaser 3. O mesmo código roda na Poki (com o Poki SDK) e como app instalável (PWA) no
+GitHub Pages: **https://lucasreinert.github.io/pawnce/**
 
 ## Rodar
 
@@ -12,13 +13,49 @@ python tools/serve.py
 ```
 
 Depois abra http://localhost:8090. O `tools/serve.py` é um servidor simples que manda o navegador
-não guardar cache, então qualquer edição aparece ao recarregar a página. Em `localhost` o Poki SDK roda em modo de teste: mostra
-os eventos no console e exibe um anúncio de exemplo quando você clica em "PLAY AGAIN".
+não guardar cache, então qualquer edição aparece ao recarregar a página. Em `localhost` o Poki SDK
+roda em modo de teste: mostra os eventos no console e exibe um anúncio de exemplo quando você clica
+em "PLAY AGAIN".
 
 ## Formato
 
-O jogo é em retrato (480×820), pensado para celular. No desktop aparece centralizado,
-com bordas nas laterais.
+O jogo é em retrato, com 480 de largura. A altura acompanha o formato da tela (de 820 a 1100), então
+celulares mais alongados, como os iPhones atuais, ficam em tela cheia sem faixas pretas. No desktop
+aparece centralizado, com bordas nas laterais. Em tela cheia no iPhone, placar, frenesi e logo descem
+o espaço do relógio/entalhe (`SAFE_TOP` em `src/game.js`).
+
+## App instalável (PWA)
+
+O jogo é publicado no GitHub Pages pelo workflow `.github/workflows/pages.yml` a cada push na `main`.
+
+**Para instalar:**
+- **iPhone**: abrir o link no **Safari** → botão Compartilhar → **Adicionar à Tela de Início**.
+- **Android**: abrir o link no **Chrome** → menu ⋮ → **Instalar app** (ou "Adicionar à tela inicial").
+
+O app abre em tela cheia com o ícone da patinha e funciona **offline** depois da primeira abertura.
+Atualizações chegam sozinhas: a cada publicação, a próxima vez que o app abrir ele baixa a versão nova.
+
+**Como funciona:**
+- `manifest.webmanifest`: nome, ícones, cores e orientação do app.
+- `sw.js` (service worker): guarda os arquivos para jogar offline. `tools/prepare_site.py` monta a
+  pasta publicada `_site/` (sem `tools/` nem `assets/source/`) e preenche no `sw.js` a versão e a
+  lista de arquivos.
+- `icons/`: ícones gerados por `tools/build_icons.py` (a patinha do logo sobre o céu do jogo).
+- Fora da Poki (GitHub Pages ou app instalado), o SDK da Poki não é carregado.
+- O Phaser fica em `lib/` (cópia local), para funcionar offline.
+
+**Primeira publicação:** no GitHub, **Settings → Pages → Build and deployment → Source: GitHub
+Actions**. Depois disso, cada push na `main` publica sozinho (acompanhe em **Actions**).
+
+**Testar a versão publicada localmente:**
+
+```bash
+python tools/prepare_site.py
+```
+
+```bash
+python tools/serve.py 8091 --site
+```
 
 ## Controles
 
@@ -174,7 +211,12 @@ Os números de dificuldade ficam no topo de `src/game.js`:
 | `assets/source/` | Tiras originais do gato e dos passarinhos |
 | `tools/build_cat_sheet.py` | Monta a spritesheet do gato a partir das tiras |
 | `tools/build_bird_sheets.py` | Monta as spritesheets dos passarinhos e gera as versões dourada e lilás |
-| `tools/serve.py` | Servidor local de testes, sem cache |
+| `tools/serve.py` | Servidor local de testes, sem cache (`--site` serve a versão publicada) |
+| `tools/prepare_site.py` | Monta a versão publicada em `_site/` e o `sw.js` final |
+| `tools/build_icons.py` | Gera os ícones do app em `icons/` |
+| `manifest.webmanifest`, `sw.js`, `icons/` | App instalável (PWA): manifesto, service worker (offline) e ícones |
+| `lib/phaser.min.js` | Phaser 3.80.1 (cópia local, para funcionar offline) |
+| `.github/workflows/pages.yml` | Publica no GitHub Pages a cada push na `main` |
 | `src/sound.js` | Sons sintetizados: ao pegar passarinho, patada + bater de asas + "piu-piu" (mais agudo a cada passarinho seguido); miado no fim |
 | `src/music.js` | Música de fundo e do frenesi, compostas em código |
 | `src/poki.js` | Wrapper do Poki SDK (o jogo funciona mesmo se ele não carregar) |
@@ -188,8 +230,8 @@ Os números de dificuldade ficam no topo de `src/game.js`:
 
 ## Antes de enviar para a Poki
 
-- Trocar o Phaser da CDN por uma cópia local (ou usar Vite para gerar o build)
-- Incluir a pasta `assets/` no envio (`assets/source/` e `tools/` não precisam ir)
+- Enviar o conteúdo de `_site/` (gerado por `tools/prepare_site.py`); o `sw.js` e o manifesto não
+  atrapalham na Poki (o service worker só é registrado fora dela)
 - Botão para ligar/desligar o som
 - Testar no celular de verdade
 - Enviar a pasta pelo portal Poki for Developers

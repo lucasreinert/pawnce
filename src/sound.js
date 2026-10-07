@@ -8,7 +8,8 @@ const Sfx = (() => {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (AC) ctx = new AC();
     }
-    if (ctx && ctx.state === 'suspended') ctx.resume();
+    // 'interrupted' acontece no iPhone depois de uma ligação ou alarme
+    if (ctx && (ctx.state === 'suspended' || ctx.state === 'interrupted')) ctx.resume();
     return ctx;
   }
 

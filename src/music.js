@@ -67,8 +67,8 @@ const Music = (() => {
 
     // Aba escondida: pausa o áudio (e não agenda notas atrasadas quando voltar)
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) ctx.suspend();
-      else ctx.resume().then(() => { nextTime = ctx.currentTime + 0.05; });
+      if (document.hidden) ctx.suspend().catch(() => {});
+      else ctx.resume().then(() => { nextTime = ctx.currentTime + 0.05; }).catch(() => {});
     });
   }
 

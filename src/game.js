@@ -1,6 +1,18 @@
 // Jogo em retrato (pensado para celular; no desktop aparece centralizado com bordas).
 const W = 480;
-const H = 820;
+// A altura acompanha o formato da tela: celulares mais alongados (iPhones atuais) ganham mais céu em
+// vez de faixas pretas. Telas mais largas (desktop, Poki) ficam no mínimo de 820.
+const H = Math.round(Phaser.Math.Clamp(W * (window.innerHeight / window.innerWidth), 820, 1100));
+// Faixa do relógio/entalhe no topo quando o app roda em tela cheia no iPhone, em pixels do jogo.
+// A interface (placar, frenesi, logo) desce essa quantidade para não ficar embaixo dela.
+const SAFE_TOP = (() => {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top, 0px);visibility:hidden';
+  document.body.appendChild(probe);
+  const px = probe.getBoundingClientRect().height;
+  probe.remove();
+  return Math.round(px * (W / window.innerWidth));
+})();
 const GROUND_Y = H - 70;
 const CAT_R = 20;
 const CAT_SCALE = 1;         // a arte já vem no tamanho do jogo (~60px de altura)
@@ -234,13 +246,13 @@ class Game extends Phaser.Scene {
   // Placar (só aparece quando a partida começa), combo e barra do frenesi.
   createHud() {
     const fix = (o) => o.setScrollFactor(0).setDepth(20);
-    this.scoreText = fix(pixelText(this, 18, 14, '0', 4));
-    this.bestText = fix(pixelText(this, 20, 58, `${TEXT.best} ${this.best}`, 2, 0x9d99c9));
-    this.comboText = fix(pixelText(this, 20, 82, '', 2, 0xffd23f)).setAlpha(0);
+    this.scoreText = fix(pixelText(this, 18, SAFE_TOP + 14, '0', 4));
+    this.bestText = fix(pixelText(this, 20, SAFE_TOP + 58, `${TEXT.best} ${this.best}`, 2, 0x9d99c9));
+    this.comboText = fix(pixelText(this, 20, SAFE_TOP + 82, '', 2, 0xffd23f)).setAlpha(0);
     this.hud = [this.scoreText, this.bestText];
     this.hud.forEach((o) => o.setAlpha(0));
 
-    this.frenzyLabel = fix(pixelText(this, W - 16, 14, `${TEXT.frenzy} X${FRENZY_MULT}`, 2, 0xd59bff))
+    this.frenzyLabel = fix(pixelText(this, W - 16, SAFE_TOP + 14, `${TEXT.frenzy} X${FRENZY_MULT}`, 2, 0xd59bff))
       .setOrigin(1, 0).setAlpha(0);
     this.frenzyBar = this.add.graphics().setScrollFactor(0).setDepth(20);
 
@@ -255,7 +267,7 @@ class Game extends Phaser.Scene {
     const scale = 7;
     const step = 8 * scale;
     const x0 = W / 2 - ((letters.length - 1) * step) / 2 - 28; // um pouco para a esquerda, abrindo espaço para a patinha
-    const y0 = 190;
+    const y0 = SAFE_TOP + 190;
     this.title = [];
 
     letters.forEach((ch, i) => {
@@ -640,7 +652,7 @@ class Game extends Phaser.Scene {
     const bw = 150;
     const bh = 10;
     const bx = W - 16 - bw;
-    const by = 42;
+    const by = SAFE_TOP + 42;
     g.fillStyle(0x07040f, 0.85).fillRoundedRect(bx - 4, by - 4, bw + 8, bh + 8, 7);
     g.lineStyle(2, 0xd59bff, 0.8).strokeRoundedRect(bx - 4, by - 4, bw + 8, bh + 8, 7);
     const fw = Math.max(bh, bw * left);

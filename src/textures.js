@@ -103,7 +103,7 @@ function drawRoof(ctx, w, h) {
 function makeTextures(scene) {
   canvasTex(scene, 'orb', 72, 72, drawOrb); // brilho atrás da estrela do frenesi
 
-  canvasTex(scene, 'sky', 480, 820, drawSky);
+  canvasTex(scene, 'sky', W, H, drawSky); // W e H vêm de src/game.js (a altura varia com a tela)
   canvasTex(scene, 'stars', 256, 256, drawStars);
   canvasTex(scene, 'moon', 140, 140, drawMoon);
   canvasTex(scene, 'skyline_far', 480, 300, (ctx, w, h) => drawSkyline(ctx, w, h, PALETTE.cityFar, 120, 280, 0.35));

@@ -3,6 +3,9 @@
 Thumbs.db
 desktop.ini
 
+# Site montado para publicação (tools/prepare_site.py)
+_site/
+
 # Python (scripts em tools/)
 __pycache__/
 *.pyc

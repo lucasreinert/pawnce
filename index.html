@@ -1,21 +1,45 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Pawnce</title>
+
+  <!-- App instalável (PWA): ícone, tela cheia e cores -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icons/favicon-64.png">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <meta name="theme-color" content="#0b0b24">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Pawnce">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
   <style>
-    html, body { margin: 0; height: 100%; background: #0b1026; overflow: hidden; touch-action: none; }
+    html, body {
+      margin: 0; height: 100%; background: #0b0b24; overflow: hidden;
+      touch-action: none; overscroll-behavior: none;
+      -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
+    }
     #game { width: 100%; height: 100%; }
   </style>
 </head>
 <body>
   <div id="game"></div>
 
-  <!-- Poki SDK (anúncios + eventos de gameplay) -->
-  <script src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js"></script>
-  <!-- Engine -->
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+  <script>
+    // Versão web/app instalado (GitHub Pages ou aberto da tela de início): sem o SDK de anúncios
+    // da Poki. Na Poki e no localhost (modo de teste da Poki) o SDK é carregado normalmente.
+    window.IS_WEB_APP = /\.github\.io$/.test(location.hostname)
+      || window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true;
+    if (!window.IS_WEB_APP) {
+      document.write('<script src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js"><\/script>');
+    }
+  </script>
+  <!-- Engine (cópia local, para funcionar offline) -->
+  <script src="lib/phaser.min.js"></script>
 
   <script src="src/poki.js"></script>
   <script src="src/sound.js"></script>
@@ -23,5 +47,11 @@
   <script src="src/textures.js"></script>
   <script src="src/ui.js"></script>
   <script src="src/game.js"></script>
+  <script>
+    // Guarda os arquivos do jogo para jogar offline (só no site publicado, não no teste local)
+    if ('serviceWorker' in navigator && window.IS_WEB_APP && location.protocol === 'https:') {
+      navigator.serviceWorker.register('sw.js');
+    }
+  </script>
 </body>
 </html>
