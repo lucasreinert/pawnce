@@ -92,6 +92,7 @@ const Sfx = (() => {
   return {
     unlock() { ensure(); },
     setMuted(m) { muted = m; },
+    context() { return ensure(); }, // mesmo AudioContext para a música (src/music.js)
 
     // Pegar passarinho: patada + bater de asas + "piu-piu"
     catch(combo) {

@@ -54,11 +54,44 @@ Ajustes: `FRENZY_MS`, `FRENZY_BOUNCE_VY`, `FRENZY_MULT`, `ORB_EVERY`, `STAR_R` (
 ## Visual
 
 Cenário minimalista: formas lisas e poucas cores (paleta em `PALETTE`, `src/textures.js`), prédios
-com janelas acesas. Os passarinhos são animados de forma contínua: a asa é uma peça separada que
-gira no ombro.
+com janelas acesas.
 
 O gato é pixel art (gato preto-azulado de olhos amarelos), mostrado no tamanho original
 (`CAT_SCALE = 1`) com filtro "nearest" para os pixels ficarem nítidos.
+
+### Passarinhos
+
+Pixel art 32×32, em três cores com o mesmo desenho: normal (branco-lilás com asas azuis), dourado
+(vale x2) e lilás (frenesi). Cada spritesheet tem 12 quadros: 0–5 voando no lugar (loop; cada
+passarinho começa num quadro diferente) e 6–11 assustado fugindo, que toca quando o gato pega.
+
+As tiras originais ficam em `assets/source/` (`bird-fly.png`, `bird-flee.png`). O script
+`tools/build_bird_sheets.py` junta as duas e gera as versões dourada e lilás trocando a paleta cor a
+cor (`assets/bird.png`, `bird-gold.png`, `bird-bonus.png`):
+
+```bash
+python tools/build_bird_sheets.py
+```
+
+Ajustes em `src/game.js`: `BIRD_SCALE` (tamanho; hoje 1.5) e `BIRD_FLAP_FPS` (velocidade do bater
+de asas de cada tipo). As cores das versões ficam em `VARIANTS`, no topo do script.
+
+## Música
+
+Composta em código (`src/music.js`), sem arquivos de áudio: um sequenciador em Web Audio toca a
+progressão Am – F – C – G em loop, em duas camadas.
+
+- **Calma** (104 BPM): arpejo de caixinha de música, baixo suave, chimbal leve e uma melodia em lá
+  menor pentatônica a cada duas voltas.
+- **Frenesi** (138 BPM): entram bumbo, caixa, chimbal, baixo pulsante, arpejo rápido e a melodia
+  marcada; a camada calma fica por baixo. A troca é um fade, e ao fim do frenesi volta à calma.
+
+A música começa no primeiro toque (o navegador só libera som depois de uma interação), fica mais
+baixa na tela de fim de jogo, muda durante os anúncios da Poki e pausa quando a aba fica escondida.
+As notas são agendadas a cada quadro do jogo (`Music.update()`), com um timer de reforço.
+
+Ajustes no topo de `src/music.js`: `TEMPO_CALM`, `TEMPO_INTENSE`, `VOLUME`, `DUCKED`, os acordes
+(`CHORDS`) e a melodia (`MELODY`, passo → nota MIDI).
 
 ## Interface
 
@@ -133,14 +166,17 @@ Os números de dificuldade ficam no topo de `src/game.js`:
 | Arquivo | O que faz |
 |---|---|
 | `src/game.js` | Regras do jogo: física, passeio, animação do gato, rastro, frenesi, pontuação, câmera, fim de jogo |
-| `src/textures.js` | Arte do cenário e dos passarinhos (Canvas 2D, estilo minimalista) |
+| `src/textures.js` | Arte do cenário (Canvas 2D, estilo minimalista) |
 | `src/ui.js` | Textos do jogo, fonte em pixel art, logo e patinha |
-| `assets/cat.png`, `assets/cat.json` | Spritesheet do gato e suas medidas (geradas pelo script abaixo) |
+| `assets/cat.png`, `assets/cat.json` | Spritesheet do gato e suas medidas (geradas por `tools/build_cat_sheet.py`) |
+| `assets/bird.png`, `bird-gold.png`, `bird-bonus.png` | Passarinhos normal, dourado e lilás (gerados por `tools/build_bird_sheets.py`) |
 | `assets/star-spin.png`, `assets/star-collect.png` | Estrela do frenesi girando e explodindo ao ser coletada (usadas como vieram) |
-| `assets/source/` | Tiras originais do gato |
-| `tools/build_cat_sheet.py` | Monta a spritesheet do jogo a partir das tiras |
+| `assets/source/` | Tiras originais do gato e dos passarinhos |
+| `tools/build_cat_sheet.py` | Monta a spritesheet do gato a partir das tiras |
+| `tools/build_bird_sheets.py` | Monta as spritesheets dos passarinhos e gera as versões dourada e lilás |
 | `tools/serve.py` | Servidor local de testes, sem cache |
 | `src/sound.js` | Sons sintetizados: ao pegar passarinho, patada + bater de asas + "piu-piu" (mais agudo a cada passarinho seguido); miado no fim |
+| `src/music.js` | Música de fundo e do frenesi, compostas em código |
 | `src/poki.js` | Wrapper do Poki SDK (o jogo funciona mesmo se ele não carregar) |
 
 ## Integração com a Poki
@@ -154,6 +190,6 @@ Os números de dificuldade ficam no topo de `src/game.js`:
 
 - Trocar o Phaser da CDN por uma cópia local (ou usar Vite para gerar o build)
 - Incluir a pasta `assets/` no envio (`assets/source/` e `tools/` não precisam ir)
-- Adicionar música
+- Botão para ligar/desligar o som
 - Testar no celular de verdade
 - Enviar a pasta pelo portal Poki for Developers

@@ -30,6 +30,11 @@ const STAR_R = 22;              // raio de coleta da estrela
 const TRAIL_COLOR = 0xf3efe6;
 const FRENZY_COLOR = 0xc77dff;  // roxo da estrela: tom da tela, rastro e pássaros do frenesi
 const STAR_PARTICLES = [0xb14dff, 0xd59bff, 0x8f3bff, 0xf0d6ff];
+
+// Passarinhos em pixel art (gerados por tools/build_bird_sheets.py): normal, dourado (x2) e lilás (frenesi)
+const BIRD_SHEETS = { bird: 'assets/bird.png', gold: 'assets/bird-gold.png', bonus: 'assets/bird-bonus.png' };
+const BIRD_FLAP_FPS = { bird: 12, gold: 16, bonus: 14 }; // quadros por segundo do bater de asas
+const BIRD_SCALE = 1.5; // tamanho dos passarinhos (1 = mesma densidade de pixels do gato)
 const TRAIL_LEN = 18;        // quantos quadros o rastro guarda
 
 // Cor e tamanho dos pontos que saltam de cada passarinho: crescem e esquentam com o combo.
@@ -93,6 +98,9 @@ class Boot extends Phaser.Scene {
     this.load.json('catMeta', 'assets/cat.json');
     this.load.spritesheet('starSpin', 'assets/star-spin.png', { frameWidth: 62, frameHeight: 60 });
     this.load.spritesheet('starCollect', 'assets/star-collect.png', { frameWidth: 80, frameHeight: 80 });
+    for (const [kind, file] of Object.entries(BIRD_SHEETS)) {
+      this.load.spritesheet(`${kind}Sheet`, file, { frameWidth: 32, frameHeight: 32 });
+    }
   }
 
   create() {
@@ -103,6 +111,16 @@ class Boot extends Phaser.Scene {
     for (const key of ['starSpin', 'starCollect']) this.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.anims.create({ key: 'starSpin', frames: this.anims.generateFrameNumbers('starSpin'), frameRate: 14, repeat: -1 });
     this.anims.create({ key: 'starCollect', frames: this.anims.generateFrameNumbers('starCollect'), frameRate: 18 });
+    // Passarinhos: quadros 0–5 voando no lugar (loop), 6–11 assustado fugindo
+    for (const kind of Object.keys(BIRD_SHEETS)) {
+      const key = `${kind}Sheet`;
+      this.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST);
+      this.anims.create({
+        key: `${kind}Fly`, repeat: -1, frameRate: BIRD_FLAP_FPS[kind],
+        frames: this.anims.generateFrameNumbers(key, { start: 0, end: 5 }),
+      });
+      this.anims.create({ key: `${kind}Flee`, frameRate: 14, frames: this.anims.generateFrameNumbers(key, { start: 6, end: 11 }) });
+    }
     Poki.init().then(() => {
       Poki.loadingFinished();
       this.scene.start('Game');
@@ -114,6 +132,8 @@ class Game extends Phaser.Scene {
   constructor() { super('Game'); }
 
   create() {
+    Music.setIntense(false);
+    Music.duck(false);
     this.state = 'ready'; // ready | playing | over
     this.score = 0;
     this.combo = 0;
@@ -181,14 +201,19 @@ class Game extends Phaser.Scene {
     this.input.on('pointermove', (p) => {
       if (this.state !== 'ready') this.targetX = p.x;
     });
+    // O navegador só libera som depois de um toque/tecla: é aí que a música começa.
+    const wakeAudio = () => {
+      Sfx.unlock();
+      Music.start();
+    };
     this.input.on('pointerdown', (p) => {
       this.targetX = p.x;
-      Sfx.unlock();
+      wakeAudio();
       this.tryJump();
     });
     this.keys = this.input.keyboard.addKeys('LEFT,RIGHT,A,D');
-    this.input.keyboard.on('keydown-SPACE', () => { Sfx.unlock(); this.tryJump(); });
-    this.input.keyboard.on('keydown-UP', () => { Sfx.unlock(); this.tryJump(); });
+    this.input.keyboard.on('keydown-SPACE', () => { wakeAudio(); this.tryJump(); });
+    this.input.keyboard.on('keydown-UP', () => { wakeAudio(); this.tryJump(); });
   }
 
   createBackground() {
@@ -293,23 +318,21 @@ class Game extends Phaser.Scene {
     }
   }
 
-  makeBird(x, y, kind, size) {
-    const body = this.add.image(0, 0, `${kind}_body`);
-    const wing = this.add.image(4, -1, `${kind}_wing`).setOrigin(0.9, 0.5);
-    const bird = this.add.container(x, y, [body, wing]).setDepth(3);
-    bird.wing = wing;
-    bird.size = size;
-    bird.flapT = Math.random() * TAU;
-    bird.flapSpeed = 13;
+  // Passarinho em pixel art batendo as asas (cada um começa num quadro diferente, para não baterem juntos)
+  makeBird(x, y, kind) {
+    const bird = this.add.sprite(x, y, `${kind}Sheet`).setDepth(3).setScale(BIRD_SCALE)
+      .play({ key: `${kind}Fly`, startFrame: Phaser.Math.Between(0, 5) });
+    bird.kind = kind;
     bird.phase = Math.random() * TAU;
     bird.hit = false;
     bird.vx = 0;
     return bird;
   }
 
+  // Os quadros olham para a direita
   face(bird, dir) {
     bird.dir = dir;
-    bird.setScale(dir * bird.size, bird.size);
+    bird.setFlipX(dir < 0);
   }
 
   spawnBirds() {
@@ -326,11 +349,11 @@ class Game extends Phaser.Scene {
       x = Phaser.Math.Clamp(x, 40, W - 40);
       this.lastX = x;
 
-      const size = 1 - diff * 0.25;
-      const bird = this.makeBird(x, this.nextY, 'bird', size);
+      const bird = this.makeBird(x, this.nextY, 'bird');
       bird.baseX = x;
       bird.baseY = this.nextY;
-      bird.r = 17 * size;
+      // A arte fica sempre no mesmo tamanho (pixel art nítida); lá no alto só a área de captura diminui.
+      bird.r = 17 * (1 - diff * 0.25);
       // Mais alto, mais passarinhos voam de um lado para o outro.
       bird.vx = Math.random() < diff * 0.8 ? Phaser.Math.Between(40, 110) * (1 + diff) * (Math.random() < 0.5 ? -1 : 1) : 0;
       this.face(bird, bird.vx ? Math.sign(bird.vx) : (Math.random() < 0.5 ? -1 : 1));
@@ -350,10 +373,9 @@ class Game extends Phaser.Scene {
   // Passarinho dourado atravessa a tela rápido e dobra a pontuação.
   spawnGolden(y) {
     const fromLeft = Math.random() < 0.5;
-    const bird = this.makeBird(fromLeft ? -30 : W + 30, y, 'gold', 1);
+    const bird = this.makeBird(fromLeft ? -30 : W + 30, y, 'gold');
     bird.vx = (fromLeft ? 1 : -1) * Phaser.Math.Between(160, 240);
     bird.baseY = y;
-    bird.flapSpeed = 18;
     this.face(bird, fromLeft ? 1 : -1);
     this.goldens.push(bird);
   }
@@ -393,11 +415,10 @@ class Game extends Phaser.Scene {
     while (this.nextBonusY > cam.scrollY - 150) {
       const x = Phaser.Math.Clamp(this.lastBonusX + Phaser.Math.FloatBetween(-110, 110), 40, W - 40);
       this.lastBonusX = x;
-      const bird = this.makeBird(x, this.nextBonusY, 'bonus', 0.9);
+      const bird = this.makeBird(x, this.nextBonusY, 'bonus');
       bird.baseX = x;
       bird.baseY = this.nextBonusY;
       bird.r = 18;
-      bird.flapSpeed = 16;
       this.face(bird, Math.random() < 0.5 ? -1 : 1);
       bird.setAlpha(0);
       this.tweens.add({ targets: bird, alpha: 1, duration: 200 });
@@ -407,6 +428,7 @@ class Game extends Phaser.Scene {
   }
 
   update(time, delta) {
+    Music.update();
     if (this.state === 'over') return;
     const dt = Math.min(delta, 50) / 1000;
     const cam = this.cameras.main;
@@ -448,11 +470,6 @@ class Game extends Phaser.Scene {
     }
     this.animateCat(time);
     this.updateTrail();
-
-    for (const bird of [...this.birds, ...this.goldens]) {
-      bird.flapT += dt * bird.flapSpeed;
-      bird.wing.rotation = Math.sin(bird.flapT) * 0.85;
-    }
 
     for (const bird of this.birds) {
       if (bird.hit) continue;
@@ -588,6 +605,7 @@ class Game extends Phaser.Scene {
     const ring = this.add.image(burst.x, burst.y, 'ring').setDepth(6).setTint(FRENZY_COLOR).setScale(0.3);
     this.tweens.add({ targets: ring, scale: 2.4, alpha: 0, duration: 550, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
     Sfx.powerUp();
+    Music.setIntense(true);
 
     if (!this.frenzy) {
       this.frenzy = true;
@@ -612,6 +630,7 @@ class Game extends Phaser.Scene {
       // A próxima estrela só aparece bem acima de onde o frenesi terminou
       this.nextOrbY = Math.min(this.nextOrbY, this.nextY - Phaser.Math.Between(ORB_EVERY[0], ORB_EVERY[1]));
       Sfx.powerDown();
+      Music.setIntense(false);
       this.tweens.add({ targets: [this.frenzyTint, this.frenzyLabel], alpha: 0, duration: 500 });
       return;
     }
@@ -674,14 +693,14 @@ class Game extends Phaser.Scene {
     this.impact(bird, 0xffd23f);
   }
 
-  // Anel de impacto, e o passarinho foge batendo as asas rápido.
+  // Anel de impacto, e o passarinho foge assustado (animação de fuga da spritesheet).
   impact(bird, color) {
     const ring = this.add.image(bird.x, bird.y, 'ring').setDepth(6).setTint(color).setScale(0.3).setAlpha(0.8);
     this.tweens.add({ targets: ring, scale: 1.2, alpha: 0, duration: 380, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
 
     const dir = bird.x < this.cat.x ? -1 : 1;
     this.face(bird, dir);
-    bird.flapSpeed = 34;
+    bird.play(`${bird.kind}Flee`);
     this.tweens.killTweensOf(bird);
     this.tweens.add({
       targets: bird, x: bird.x + dir * 150, y: bird.y - 170, alpha: 0, duration: 700, ease: 'Sine.easeIn',
@@ -729,6 +748,8 @@ class Game extends Phaser.Scene {
     this.state = 'over';
     Poki.gameplayStop();
     Sfx.meow();
+    Music.setIntense(false);
+    Music.duck(true);
     this.frenzyBar.clear();
 
     const isRecord = this.score > this.best;
@@ -803,8 +824,12 @@ class Game extends Phaser.Scene {
       this.tweens.add({ targets: btnG, scale: 0.92, duration: 90, yoyo: true });
       this.tweens.add({ targets: btnT, scale: 2.76, duration: 90, yoyo: true });
       // Anúncio entre partidas: muta o som enquanto passa e reinicia quando terminar.
-      Poki.commercialBreak(() => Sfx.setMuted(true)).then(() => {
+      Poki.commercialBreak(() => {
+        Sfx.setMuted(true);
+        Music.setMuted(true);
+      }).then(() => {
         Sfx.setMuted(false);
+        Music.setMuted(false);
         this.scene.restart();
       });
     };

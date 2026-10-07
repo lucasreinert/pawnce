@@ -1,5 +1,6 @@
-// Arte do cenário e dos pássaros, em estilo minimalista: formas lisas e poucas cores.
-// (O gato é pixel art: assets/cat.png, gerado a partir da spritesheet original por tools/extract_cat.py.)
+// Arte do cenário em estilo minimalista: formas lisas e poucas cores.
+// (Gato, passarinhos e estrela são pixel art em assets/; o gato e os passarinhos são montados por
+// tools/build_cat_sheet.py e tools/build_bird_sheets.py.)
 
 const TAU = Math.PI * 2;
 
@@ -10,60 +11,13 @@ const PALETTE = {
   cityNear: '#15112f',
   roof: '#0b091c',
   moon: '#f4efe1',
-  glow: '#8fe3ff',
-  bird: '#ecebff',
-  birdWing: '#c4c1ee',
-  gold: '#ffd23f',
-  goldWing: '#f0b000',
-  bonus: '#f1e3ff',        // pássaros do frenesi (lilás, combinando com a estrela)
-  bonusWing: '#c58cff',
   window: '255, 214, 140', // luz das janelas (rgb)
-  beak: '#ffb347',
-  eye: '#1a1830',
 };
 
 function canvasTex(scene, key, w, h, draw) {
   const tex = scene.textures.createCanvas(key, w, h);
   draw(tex.getContext(), w, h);
   tex.refresh();
-}
-
-// Pássaro = corpo + asa separada (a asa gira no ombro, então o bater de asas é contínuo).
-function drawBirdBody(ctx, body, glow) {
-  ctx.translate(8, 8);
-  if (glow) {
-    ctx.shadowColor = glow;
-    ctx.shadowBlur = 10;
-  }
-  ctx.fillStyle = body;
-  ctx.beginPath();
-  ctx.moveTo(12, 20);
-  ctx.lineTo(2, 14);
-  ctx.lineTo(4, 25);
-  ctx.closePath();
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(22, 20, 11, 0, TAU);
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = PALETTE.beak;
-  ctx.beginPath();
-  ctx.moveTo(32, 17);
-  ctx.lineTo(38.5, 19.5);
-  ctx.lineTo(32, 22);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = PALETTE.eye;
-  ctx.beginPath();
-  ctx.arc(27, 16.5, 1.8, 0, TAU);
-  ctx.fill();
-}
-
-function drawWing(ctx, color) {
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.ellipse(13, 7, 12, 5, 0, 0, TAU);
-  ctx.fill();
 }
 
 function drawSky(ctx, w, h) {
@@ -147,13 +101,7 @@ function drawRoof(ctx, w, h) {
 }
 
 function makeTextures(scene) {
-  canvasTex(scene, 'bird_body', 58, 56, (ctx) => drawBirdBody(ctx, PALETTE.bird, null));
-  canvasTex(scene, 'bird_wing', 26, 14, (ctx) => drawWing(ctx, PALETTE.birdWing));
-  canvasTex(scene, 'gold_body', 58, 56, (ctx) => drawBirdBody(ctx, PALETTE.gold, 'rgba(255, 210, 63, 0.8)'));
-  canvasTex(scene, 'gold_wing', 26, 14, (ctx) => drawWing(ctx, PALETTE.goldWing));
-  canvasTex(scene, 'bonus_body', 58, 56, (ctx) => drawBirdBody(ctx, PALETTE.bonus, 'rgba(192, 107, 255, 0.9)'));
-  canvasTex(scene, 'bonus_wing', 26, 14, (ctx) => drawWing(ctx, PALETTE.bonusWing));
-  canvasTex(scene, 'orb', 72, 72, drawOrb);
+  canvasTex(scene, 'orb', 72, 72, drawOrb); // brilho atrás da estrela do frenesi
 
   canvasTex(scene, 'sky', 480, 820, drawSky);
   canvasTex(scene, 'stars', 256, 256, drawStars);
