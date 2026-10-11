@@ -93,6 +93,35 @@ Não aparecem estrelas durante um frenesi, então não dá para emendar um no ou
 Ajustes: `FRENZY_MS`, `FRENZY_BOUNCE_VY`, `FRENZY_MULT`, `ORB_EVERY`, `STAR_R` (raio de coleta),
 `FRENZY_COLOR` e `STAR_PARTICLES` (cores) em `src/game.js`.
 
+## Altura e linha de recorde
+
+A altura é contada em metros (1 m = 40 px na escala de 480, `PX_PER_METER`; um passarinho fica a
+uns 4 m do outro). A maior altura já alcançada fica salva no aparelho e aparece no céu como uma
+**linha tracejada translúcida** com "BEST N M". Quando o gato passa dela, a linha fica dourada,
+aparece "NEW RECORD!" com faíscas e ela some. O cartão de fim de jogo mostra a altura da partida
+("NEW!" se for recorde).
+
+## Ranking
+
+Dois quadros: **maior pontuação** e **maior altura** (`src/leaderboard.js`). Cada jogador tem uma
+única entrada com o nome e os seus dois recordes, atualizada só quando um recorde melhora. A tela de
+ranking (botão RANKING na tela inicial e no fim de jogo) tem as abas SCORE e HEIGHT, o Top 10, a
+linha do jogador destacada e, se ele estiver fora do Top 10, a posição dele embaixo.
+
+- **Na Poki**: usa o [AUDS](https://developers.poki.com/guide/auds), o armazenamento de dados da
+  própria Poki (sem servidor próprio). Só funciona com o jogo publicado lá e com o id do jogo em
+  `POKI_GAME_ID`, no topo de `src/leaderboard.js`. Enquanto estiver vazio, o ranking fica desligado.
+- **No localhost**: ranking de teste guardado no navegador, com jogadores fictícios, para ver e
+  testar a tela.
+- **No GitHub Pages / app instalado**: desligado (os botões de ranking não aparecem).
+
+Nome no ranking: o da conta Poki, se o jogador estiver logado; senão, um apelido gerado e guardado no
+aparelho (ex.: "SNEAKY CAT 42"). O jogador não digita o nome, porque um ranking público com nomes
+livres precisaria de moderação.
+
+Limitação: o AUDS não valida as pontuações, então dá para trapacear enviando valores falsos. Se isso
+virar problema, o caminho é um servidor próprio que confere o token da conta Poki (`getToken()`).
+
 ## Visual
 
 Cenário minimalista: formas lisas e poucas cores (paleta em `PALETTE`, `src/textures.js`), prédios
@@ -224,6 +253,7 @@ Os números de dificuldade ficam no topo de `src/game.js`:
 | `.github/workflows/pages.yml` | Publica no GitHub Pages a cada push na `main` |
 | `src/sound.js` | Sons sintetizados: ao pegar passarinho, patada + bater de asas + "piu-piu" (mais agudo a cada passarinho seguido); miado no fim |
 | `src/music.js` | Música de fundo e do frenesi, compostas em código |
+| `src/leaderboard.js` | Ranking online (AUDS da Poki; ranking de teste no localhost) |
 | `src/poki.js` | Wrapper do Poki SDK (o jogo funciona mesmo se ele não carregar) |
 
 ## Integração com a Poki
@@ -232,6 +262,8 @@ Os números de dificuldade ficam no topo de `src/game.js`:
 - `gameplayStart()`: no primeiro pulo de cada partida
 - `gameplayStop()`: quando o gato cai
 - `commercialBreak()`: ao clicar em "PLAY AGAIN" (o som fica mudo durante o anúncio)
+- `getUser()`: nome da conta Poki para o ranking (se o jogador estiver logado)
+- AUDS: ranking online (precisa do `POKI_GAME_ID` em `src/leaderboard.js`)
 
 ## Antes de enviar para a Poki
 

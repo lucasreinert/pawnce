@@ -14,6 +14,14 @@ const TEXT = {
   gameOver: 'GAME OVER',
   playAgain: 'PLAY AGAIN',
   frenzy: 'FRENZY',
+  height: 'HEIGHT',
+  meters: 'M',
+  newRecord: 'NEW RECORD!',
+  ranking: 'RANKING',
+  back: 'BACK',
+  loading: 'LOADING...',
+  unavailable: 'RANKING UNAVAILABLE',
+  empty: 'NO SCORES YET',
 };
 
 // Cada letra: 7 linhas de 5 colunas ('#' = pixel aceso)

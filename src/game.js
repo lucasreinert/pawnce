@@ -75,6 +75,16 @@ function saveBest(v) {
   try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) {}
 }
 
+// Altura em metros: 1 m = 40 px (na escala de 480). Um passarinho fica a uns 4 m do outro.
+const PX_PER_METER = 40 * KS;
+const BEST_HEIGHT_KEY = 'pawnce-best-height';
+function loadBestHeight() {
+  try { return Number(localStorage.getItem(BEST_HEIGHT_KEY)) || 0; } catch (e) { return 0; }
+}
+function saveBestHeight(v) {
+  try { localStorage.setItem(BEST_HEIGHT_KEY, String(v)); } catch (e) {}
+}
+
 // Spritesheet do gato em pixel art (gerada por tools/build_cat_sheet.py).
 // CAT guarda as medidas lidas de assets/cat.json e o índice de cada quadro pelo nome (walk0, jump3, sit5...).
 const CAT = { frame: {} };
@@ -156,6 +166,10 @@ class Game extends Phaser.Scene {
     this.score = 0;
     this.combo = 0;
     this.best = loadBest();
+    this.bestHeight = loadBestHeight(); // maior altura já alcançada (m)
+    this.maxHeight = 0;                 // maior altura nesta partida (m)
+    this.passedBest = false;
+    this.rankUI = null;                 // tela de ranking aberta
     this.vx = 0;
     this.vy = 0;
     this.now = 0;
@@ -180,8 +194,9 @@ class Game extends Phaser.Scene {
     this.trail = [];
 
     this.createBackground();
+    this.createBestLine();
 
-    this.trailGfx = this.add.graphics().setDepth(4).setBlendMode(Phaser.BlendModes.ADD);
+    this.trailGfx =this.add.graphics().setDepth(4).setBlendMode(Phaser.BlendModes.ADD);
     this.cat = this.add.sprite(W / 2, GROUND_Y - CAT_FOOT, 'catSheet', CAT.frame.sit0)
       .setScale(CAT_SCALE).setDepth(5);
     this.setFacing(1);
@@ -225,13 +240,67 @@ class Game extends Phaser.Scene {
       Music.start();
     };
     this.input.on('pointerdown', (p) => {
-      this.targetX = p.x;
       wakeAudio();
+      // Toque num botão (ranking etc.) ou com a tela de ranking aberta não faz o gato pular
+      if (this.rankUI || this.input.hitTestPointer(p).length) return;
+      this.targetX = p.x;
       this.tryJump();
     });
     this.keys = this.input.keyboard.addKeys('LEFT,RIGHT,A,D');
-    this.input.keyboard.on('keydown-SPACE', () => { wakeAudio(); this.tryJump(); });
-    this.input.keyboard.on('keydown-UP', () => { wakeAudio(); this.tryJump(); });
+    this.input.keyboard.on('keydown-SPACE', () => { wakeAudio(); if (!this.rankUI) this.tryJump(); });
+    this.input.keyboard.on('keydown-UP', () => { wakeAudio(); if (!this.rankUI) this.tryJump(); });
+  }
+
+  // Botão em pílula (fixo na tela). filled = roxo cheio; senão só contorno.
+  // Sem Container de propósito: objetos interativos dentro de um Container com scrollFactor 0
+  // recebem o clique na posição errada quando a câmera já subiu.
+  makeButton(x, y, w, h, label, { filled = false, depth = 30, size = 2, onPress }) {
+    const g = this.add.graphics({ x, y }).setScrollFactor(0).setDepth(depth);
+    if (filled) {
+      g.fillStyle(0x07040f, 1).fillRoundedRect(-w / 2, -h / 2 + 4, w, h, h / 2.6);
+      g.fillStyle(0x8f3bff, 1).fillRoundedRect(-w / 2, -h / 2, w, h, h / 2.6);
+      g.lineStyle(2, 0xe6c7ff, 1).strokeRoundedRect(-w / 2, -h / 2, w, h, h / 2.6);
+    } else {
+      g.fillStyle(0x120c2a, 0.95).fillRoundedRect(-w / 2, -h / 2, w, h, h / 2.6);
+      g.lineStyle(2, 0xb98cff, 1).strokeRoundedRect(-w / 2, -h / 2, w, h, h / 2.6);
+    }
+    const t = pixelText(this, x, y, label, size, filled ? 0xffffff : 0xd59bff)
+      .setOrigin(0.5).setScrollFactor(0).setDepth(depth);
+    const zone = this.add.zone(x, y, w, h).setScrollFactor(0).setDepth(depth)
+      .setInteractive({ useHandCursor: true });
+    zone.on('pointerdown', () => {
+      this.tweens.add({ targets: g, scale: 0.94, duration: 70, yoyo: true });
+      onPress();
+    });
+    return [g, t, zone];
+  }
+
+  // Linha tracejada e translúcida na maior altura já alcançada, com o valor em metros.
+  createBestLine() {
+    if (this.bestHeight <= 0) return;
+    const y = GROUND_Y - CAT_FOOT - this.bestHeight * PX_PER_METER;
+    const g = this.add.graphics().setDepth(2);
+    this.drawDashedLine(g, y, 0xffffff, 0.35);
+    const label = pixelText(this, 12, y - 24, `${TEXT.best} ${this.bestHeight} ${TEXT.meters}`, 2, 0xffffff)
+      .setDepth(2).setAlpha(0.55);
+    this.bestLine = { g, label, y };
+  }
+
+  drawDashedLine(g, y, color, alpha) {
+    g.clear();
+    g.fillStyle(color, alpha);
+    for (let x = 0; x < W; x += 20) g.fillRect(x, y - 1, 12, 3);
+  }
+
+  // O gato passou da linha de recorde: ela brilha em dourado, aparece "NEW RECORD!" e depois some.
+  passBestLine() {
+    this.passedBest = true;
+    const { g, label, y } = this.bestLine;
+    this.drawDashedLine(g, y, 0xffd23f, 0.9);
+    label.setText(TEXT.newRecord).setTint(0xffd23f).setAlpha(1).setScale(2.8);
+    this.tweens.add({ targets: label, scale: 2, duration: 250, ease: 'Back.easeOut' });
+    this.goldDots.explode(20, this.cat.x, y);
+    this.tweens.add({ targets: [g, label], alpha: 0, delay: 900, duration: 900 });
   }
 
   createBackground() {
@@ -253,8 +322,10 @@ class Game extends Phaser.Scene {
   createHud() {
     const fix = (o) => o.setScrollFactor(0).setDepth(20);
     this.scoreText = fix(pixelText(this, 18, SAFE_TOP + 14, '0', 4));
-    this.bestText = fix(pixelText(this, 20, SAFE_TOP + 58, `${TEXT.best} ${this.best}`, 2, 0x9d99c9));
-    this.comboText = fix(pixelText(this, 20, SAFE_TOP + 82, '', 2, 0xffd23f)).setAlpha(0);
+    // Sem recorde ainda (primeira partida): não mostra "BEST 0" e o combo sobe para o lugar dele
+    const hasBest = this.best > 0;
+    this.bestText = fix(pixelText(this, 20, SAFE_TOP + 58, hasBest ? `${TEXT.best} ${this.best}` : '', 2, 0x9d99c9));
+    this.comboText = fix(pixelText(this, 20, SAFE_TOP + (hasBest ? 82 : 58), '', 2, 0xffd23f)).setAlpha(0);
     this.hud = [this.scoreText, this.bestText];
     this.hud.forEach((o) => o.setAlpha(0));
 
@@ -312,14 +383,26 @@ class Game extends Phaser.Scene {
     const sub = [
       fix(pixelText(this, W / 2, y0 + 74, TEXT.tagline, 2, 0xb9a8ff).setCenterAlign().setOrigin(0.5)),
     ];
-    if (this.best > 0) sub.push(fix(pixelText(this, W / 2, y0 + 120, `${TEXT.best} ${this.best}`, 2, 0xffd23f).setOrigin(0.5)));
+    if (this.best > 0) {
+      const heightPart = this.bestHeight > 0 ? `   ${this.bestHeight} ${TEXT.meters}` : '';
+      sub.push(fix(pixelText(this, W / 2, y0 + 120, `${TEXT.best} ${this.best}${heightPart}`, 2, 0xffd23f).setOrigin(0.5)));
+    }
     const tap = fix(pixelText(this, W / 2, H * 0.53, TEXT.tapToJump, 4).setOrigin(0.5));
     const drag = fix(pixelText(this, W / 2, H * 0.53 + 42, TEXT.dragToMove, 2, 0x9d99c9).setOrigin(0.5));
     sub.push(tap, drag);
+    let zone = null;
+    if (Leaderboard.enabled) {
+      const [g, t, z] = this.makeButton(W / 2, H * 0.53 + 112, 190, 48, TEXT.ranking, {
+        depth: 20, onPress: () => this.openRanking('score'),
+      });
+      sub.push(g, t);
+      zone = z;
+    }
     sub.forEach((o) => o.setAlpha(0));
     this.tweens.add({ targets: sub, alpha: 1, delay: 800, duration: 400 });
     this.tweens.add({ targets: tap, scale: 4.25, delay: 1200, duration: 650, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     this.title.push(...sub);
+    if (zone) this.titleZone = zone;
   }
 
   tryJump() {
@@ -331,6 +414,7 @@ class Game extends Phaser.Scene {
         this.tweens.killTweensOf(o);
         this.tweens.add({ targets: o, alpha: 0, y: o.y - 30, duration: 300, ease: 'Quad.easeIn', onComplete: () => o.destroy() });
       }
+      if (this.titleZone) this.titleZone.destroy();
       this.tweens.add({ targets: this.hud, alpha: 1, duration: 300, delay: 150 });
       Poki.gameplayStart();
     }
@@ -493,6 +577,13 @@ class Game extends Phaser.Scene {
     }
     this.animateCat(time);
     this.updateTrail();
+
+    // Altura (m) desta partida e a passagem pela linha de recorde
+    if (this.state === 'playing') {
+      const h = Math.max(0, Math.floor((GROUND_Y - CAT_FOOT - this.cat.y) / PX_PER_METER));
+      if (h > this.maxHeight) this.maxHeight = h;
+      if (this.bestLine && !this.passedBest && h > this.bestHeight) this.passBestLine();
+    }
 
     for (const bird of this.birds) {
       if (bird.hit) continue;
@@ -780,6 +871,12 @@ class Game extends Phaser.Scene {
       this.best = this.score;
       saveBest(this.best);
     }
+    const isHeightRecord = this.maxHeight > this.bestHeight;
+    if (isHeightRecord) {
+      this.bestHeight = this.maxHeight;
+      saveBestHeight(this.bestHeight);
+    }
+    Leaderboard.submit({ score: this.best, height: this.bestHeight });
 
     // Placar some; no lugar entra um cartão com a pontuação e o botão de jogar de novo.
     // Sem Container de propósito: objetos interativos dentro de um Container com
@@ -791,13 +888,17 @@ class Game extends Phaser.Scene {
     const overlay = fix(this.add.rectangle(0, 0, W, H, 0x05030f, 0.72).setOrigin(0)).setAlpha(0);
     this.tweens.add({ targets: overlay, alpha: 1, duration: 300 });
 
+    // Cartão: GAME OVER, pontuação, recorde, altura da partida, PLAY AGAIN e (se houver) RANKING
+    const withRanking = Leaderboard.enabled;
     const cw = Math.min(380, W - 32);
-    const chh = 370;
+    const top = -200;
+    const bottom = withRanking ? 200 : 140;
+    const chh = bottom - top;
     const card = fix(this.add.graphics({ x: W / 2, y: cy }));
-    card.fillStyle(0x07040f, 0.9).fillRoundedRect(-cw / 2, -chh / 2 + 8, cw, chh, 24); // sombra
-    card.fillStyle(0x1a1238, 1).fillRoundedRect(-cw / 2, -chh / 2, cw, chh, 24);
-    card.lineStyle(4, 0x8f6bd8, 1).strokeRoundedRect(-cw / 2, -chh / 2, cw, chh, 24);
-    card.lineStyle(2, 0x3a2a70, 1).strokeRoundedRect(-cw / 2 + 10, -chh / 2 + 10, cw - 20, chh - 20, 16);
+    card.fillStyle(0x07040f, 0.9).fillRoundedRect(-cw / 2, top + 8, cw, chh, 24); // sombra
+    card.fillStyle(0x1a1238, 1).fillRoundedRect(-cw / 2, top, cw, chh, 24);
+    card.lineStyle(4, 0x8f6bd8, 1).strokeRoundedRect(-cw / 2, top, cw, chh, 24);
+    card.lineStyle(2, 0x3a2a70, 1).strokeRoundedRect(-cw / 2 + 10, top + 10, cw - 20, chh - 20, 16);
 
     const items = [card];
     const text = (dy, str, size, tint) => {
@@ -805,19 +906,21 @@ class Game extends Phaser.Scene {
       items.push(t);
       return t;
     };
-    text(-135, TEXT.gameOver, 4, 0xd59bff);
-    text(-80, TEXT.score, 2, 0x8f88c0);
+    text(-160, TEXT.gameOver, 4, 0xd59bff);
+    text(-122, TEXT.score, 2, 0x8f88c0);
     const scoreStr = String(this.score);
-    text(-38, scoreStr, Phaser.Math.Clamp(Math.floor((cw - 60) / (scoreStr.length * 8)), 3, 6));
+    text(-76, scoreStr, Phaser.Math.Clamp(Math.floor((cw - 60) / (scoreStr.length * 8)), 3, 6));
     if (isRecord) {
-      const nb = text(28, TEXT.newBest, 3, 0xffd23f);
+      const nb = text(-20, TEXT.newBest, 3, 0xffd23f);
       this.tweens.add({ targets: nb, scale: 3.3, delay: 700, duration: 450, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     } else {
-      text(28, `${TEXT.best} ${this.best}`, 2, 0x9d99c9);
+      text(-20, `${TEXT.best} ${this.best}`, 2, 0x9d99c9);
     }
+    const heightLine = `${TEXT.height} ${this.maxHeight} ${TEXT.meters}${isHeightRecord ? '  NEW!' : ''}`;
+    text(18, heightLine, 2, isHeightRecord ? 0xffd23f : 0xb9a8ff);
 
     // Botão "PLAY AGAIN": sombra, corpo roxo, faixa de brilho e borda clara
-    const btnDy = 112;
+    const btnDy = 84;
     const bw = 280;
     const bh = 66;
     const btnG = fix(this.add.graphics({ x: W / 2, y: cy + btnDy }));
@@ -827,6 +930,10 @@ class Game extends Phaser.Scene {
     btnG.lineStyle(3, 0xe6c7ff, 1).strokeRoundedRect(-bw / 2, -bh / 2, bw, bh, 20);
     items.push(btnG);
     const btnT = text(btnDy, TEXT.playAgain, 3);
+    if (withRanking) {
+      const [g, t] = this.makeButton(W / 2, cy + 156, 190, 46, TEXT.ranking, { depth: 30, onPress: () => this.openRanking('score') });
+      items.push(g, t);
+    }
 
     // Entrada: cada item sobe e aparece, um atrás do outro
     items.forEach((o, i) => {
@@ -858,6 +965,76 @@ class Game extends Phaser.Scene {
     };
     btn.on('pointerdown', restart);
     this.input.keyboard.once('keydown-ENTER', restart);
+  }
+
+  // Tela de ranking: abas SCORE / HEIGHT, Top 10, a linha do jogador destacada e, se ele estiver
+  // fora do Top 10, a posição dele embaixo.
+  openRanking(kind) {
+    this.closeRanking();
+    const depth = 40;
+    const ui = [];
+    const fix = (o) => {
+      o.setScrollFactor(0).setDepth(depth);
+      ui.push(o);
+      return o;
+    };
+    const pw = Math.min(380, W - 24);
+    const ph = Math.min(620, H - 60 - SAFE_TOP);
+    const cx = W / 2;
+    const cy = SAFE_TOP + (H - SAFE_TOP) / 2;
+    const left = cx - pw / 2;
+    const right = cx + pw / 2;
+    const top = cy - ph / 2;
+
+    fix(this.add.rectangle(0, 0, W, H, 0x05030f, 0.82).setOrigin(0)).setInteractive(); // bloqueia cliques atrás
+    const panel = fix(this.add.graphics({ x: cx, y: cy }));
+    panel.fillStyle(0x1a1238, 1).fillRoundedRect(-pw / 2, -ph / 2, pw, ph, 24);
+    panel.lineStyle(4, 0x8f6bd8, 1).strokeRoundedRect(-pw / 2, -ph / 2, pw, ph, 24);
+    fix(pixelText(this, cx, top + 40, TEXT.ranking, 4, 0xd59bff).setOrigin(0.5));
+
+    [['score', TEXT.score], ['height', TEXT.height]].forEach(([key, label], i) => {
+      const onPress = () => { if (key !== kind) this.openRanking(key); };
+      ui.push(...this.makeButton(cx + (i === 0 ? -80 : 80), top + 96, 150, 44, label, { filled: key === kind, depth, onPress }));
+    });
+    ui.push(...this.makeButton(cx, top + ph - 44, 190, 48, TEXT.back, { depth, onPress: () => this.closeRanking() }));
+
+    const listTop = top + 146;
+    const rowH = 30;
+    const status = fix(pixelText(this, cx, listTop + 120, TEXT.loading, 2, 0x9d99c9).setOrigin(0.5));
+    this.rankUI = ui;
+    const token = {};
+    this.rankToken = token;
+
+    const fmt = (v) => (kind === 'height' ? `${v} ${TEXT.meters}` : String(v));
+    const RANK_COLORS = [0xffd23f, 0xd8d8f0, 0xe0995a]; // ouro, prata, bronze
+    const row = (y, rank, name, value, isMe) => {
+      if (isMe) {
+        fix(this.add.graphics()).fillStyle(0x8f3bff, 0.35).fillRoundedRect(left + 10, y - rowH / 2 + 2, pw - 20, rowH - 4, 8);
+      }
+      const color = isMe ? 0xffd23f : 0xffffff;
+      fix(pixelText(this, left + 56, y, String(rank), 2, RANK_COLORS[rank - 1] || 0xb9a8ff).setLetterSpacing(-1).setOrigin(1, 0.5));
+      fix(pixelText(this, left + 68, y, name, 2, color).setLetterSpacing(-1).setOrigin(0, 0.5));
+      fix(pixelText(this, right - 18, y, fmt(value), 2, color).setLetterSpacing(-1).setOrigin(1, 0.5));
+    };
+
+    Leaderboard.board(kind, 10).then(({ rows, mine }) => {
+      if (this.rankToken !== token) return; // fechou ou trocou de aba enquanto carregava
+      status.setText(TEXT.empty).setVisible(rows.length === 0);
+      rows.forEach((r, i) => row(listTop + i * rowH, i + 1, r.name, r[kind], r.me));
+      if (mine && mine.rank > rows.length) {
+        fix(pixelText(this, cx, listTop + rows.length * rowH + 2, '...', 2, 0x9d99c9).setOrigin(0.5));
+        row(listTop + (rows.length + 1) * rowH, mine.rank, mine.name, mine.value, true);
+      }
+    }).catch(() => {
+      if (this.rankToken === token) status.setText(TEXT.unavailable);
+    });
+  }
+
+  closeRanking() {
+    if (!this.rankUI) return;
+    this.rankUI.forEach((o) => o.destroy());
+    this.rankUI = null;
+    this.rankToken = null;
   }
 }
 
