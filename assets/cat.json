@@ -1,6 +1,6 @@
 {
-  "frameWidth": 77,
-  "frameHeight": 69,
+  "frameWidth": 79,
+  "frameHeight": 71,
   "frames": [
     "walk0",
     "walk1",
@@ -27,8 +27,8 @@
     "jump6",
     "jump7"
   ],
-  "originX": 0.5687,
-  "originY": 0.518,
-  "footY": 66,
-  "centerY": 35.74
+  "originX": 0.567,
+  "originY": 0.5175,
+  "footY": 67,
+  "centerY": 36.74
 }

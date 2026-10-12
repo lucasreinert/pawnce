@@ -115,6 +115,19 @@ const Sfx = (() => {
       tone(2637, 0.45, 0.025, 'sine', 0.22); // brilhinho no fim
     },
 
+    // Falcão chegando: grito agudo descendente ("kiiiaa"), um pouco áspero
+    hawkWarn() {
+      tone(2200, 0.35, 0.05, 'sawtooth', 0, 1300);
+      tone(2600, 0.25, 0.03, 'square', 0.04, 1500);
+    },
+
+    // Falcão acertou o gato: pancada grave + penas + nota caindo
+    hawkHit() {
+      tone(140, 0.18, 0.16, 'sine', 0, 50);
+      flutter(0.22, 0.07, 3);
+      tone(520, 0.4, 0.06, 'triangle', 0.05, 180);
+    },
+
     powerUp() {
       [0, 4, 7, 12, 16, 19, 24].forEach((s, i) => tone(523 * Math.pow(2, s / 12), 0.25, 0.09, 'triangle', i * 0.045));
     },

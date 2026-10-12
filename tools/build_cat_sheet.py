@@ -34,6 +34,26 @@ STRIPS = {
 }
 
 
+# Contorno em pixel art em volta do gato (ajuda a enxergar o gato escuro no céu noturno, no celular).
+# OUTLINE = None tira o contorno. OUTLINE_DIAGONALS = True também preenche as quinas (mais grosso).
+OUTLINE = (255, 255, 255, 255)
+OUTLINE_DIAGONALS = True
+
+
+def add_outline(cell):
+    """Pinta de OUTLINE os pixels transparentes vizinhos do desenho (1 px, na grade da arte)."""
+    body = cell[..., 3] > 0
+    padded = np.pad(body, 1)
+    h, w = body.shape
+    near = np.zeros_like(body)
+    steps = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+    if OUTLINE_DIAGONALS:
+        steps += [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+    for dy, dx in steps:
+        near |= padded[1 + dy:1 + dy + h, 1 + dx:1 + dx + w]
+    cell[near & ~body] = OUTLINE
+
+
 def components(mask):
     """Rotula pedaços conectados (vizinhança de 8) de uma máscara booleana."""
     h, w = mask.shape
@@ -104,7 +124,7 @@ def main():
             f['ox'] = int(round(gcx - f['com'][0]))
             f['oy'] = int(round(gcy - f['com'][1]))
 
-    pad = 1
+    pad = 2  # 1 px de folga + 1 px para o contorno
     min_x = min(f['ox'] for f in frames)
     min_y = min(f['oy'] for f in frames)
     cw = max(f['ox'] + f['w'] for f in frames) - min_x + pad * 2
@@ -118,6 +138,8 @@ def main():
         region = sheet[y0:y0 + f['h'], x0:x0 + f['w']]
         opaque = f['img'][..., 3] > 0
         region[opaque] = f['img'][opaque]
+        if OUTLINE:
+            add_outline(sheet[:, n * cw:(n + 1) * cw])
     Image.fromarray(sheet, 'RGBA').save(OUT_PNG)
 
     meta = {

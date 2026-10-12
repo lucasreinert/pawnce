@@ -7,7 +7,11 @@ const W = 400;
 const KS = W / 480;
 // A altura acompanha o formato da tela: celulares mais alongados (iPhones atuais) ganham mais céu em
 // vez de faixas pretas. Telas mais largas (desktop, Poki) ficam no mínimo.
-const H = Math.round(Phaser.Math.Clamp(W * (window.innerHeight / window.innerWidth), 820 * KS, 1100 * KS));
+// (Se a página carregar com tamanho zero, por exemplo num quadro ainda invisível, usa a altura mínima.)
+const SCREEN_RATIO = window.innerHeight / window.innerWidth;
+const H = Math.round(Phaser.Math.Clamp(
+  Number.isFinite(SCREEN_RATIO) && SCREEN_RATIO > 0 ? W * SCREEN_RATIO : 820 * KS, 820 * KS, 1100 * KS,
+));
 // Faixa do relógio/entalhe no topo quando o app roda em tela cheia no iPhone, em pixels do jogo.
 // A interface (placar, frenesi, logo) desce essa quantidade para não ficar embaixo dela.
 const SAFE_TOP = (() => {
@@ -16,7 +20,7 @@ const SAFE_TOP = (() => {
   document.body.appendChild(probe);
   const px = probe.getBoundingClientRect().height;
   probe.remove();
-  return Math.round(px * (W / window.innerWidth));
+  return window.innerWidth > 0 ? Math.round(px * (W / window.innerWidth)) : 0;
 })();
 const GROUND_Y = H - Math.round(70 * KS);
 const CAT_R = 20;
@@ -30,7 +34,30 @@ const GAP_MIN = 150 * KS;     // distância vertical entre passarinhos...
 const GAP_MAX = 190 * KS;
 const GAP_GROW = 110 * KS;    // ...e quanto ela aumenta lá no alto
 const DX_MAX = 230 * KS;      // distância horizontal máxima entre passarinhos seguidos
-const DIFF_HEIGHT = 20000 * KS; // altura em que a dificuldade chega ao máximo
+const DIFF_HEIGHT = 20000 * KS; // fase 1 (0 → 500 m): passarinhos se afastam, diminuem e passam a voar
+// Fase 2 (500 → 1500 m): a dificuldade continua subindo em vez de parar nos 500 m
+const HARD_HEIGHT = 40000 * KS; // quanto dura a fase 2 (1000 m)
+const GAP_HARD = 40 * KS;       // distância vertical extra no fim da fase 2 (ainda alcançável com folga)
+
+// Falcão: atravessa a tela depois de um aviso. Encostar nele empurra o gato para o lado (na direção em
+// que o falcão voa) com um pulinho, tira o controle por um instante e zera o combo; dá para se
+// recuperar. Depois do acerto o gato fica protegido por um momento. No frenesi o gato é imune.
+const HAWK_START_M = 150;       // a partir de quantos metros aparece
+const HAWK_EVERY_S = [9, 3.5];  // intervalo entre falcões: no começo → lá no alto (1150 m)
+const HAWK_WARN_MS = 1500;      // duração do aviso "!" antes de ele entrar
+const HAWK_SPEED = [260, 420];  // px/s (escala de 480): no começo → lá no alto
+const HAWK_R = 24;              // raio de colisão
+const HAWK_SCALE = 1.5;         // assets/hawk.png: 6 quadros de 64x64 voando (usado como veio)
+// Quanto o acerto pune (testado com bot de mira perfeita que não desvia; % = acertos dos quais ele
+// se recuperou): 400 ms / -420 → 97%; 550 ms / -300 → 83% (atual); 650 ms / -250 → 65%.
+const KNOCK_MS = 550;           // quanto tempo o gato fica sem controle, sendo empurrado
+const KNOCK_SPEED = 650 * KS;   // velocidade do empurrão para o lado
+const KNOCK_HOP = -300 * KS;    // pulinho para cima no acerto (não despenca)
+const HAWK_SAFE_MS = 1000;      // proteção depois de um acerto (não leva outro em seguida)
+
+// Passarinhos assustadiços: desviam para o lado quando o gato chega perto
+const SKITTISH_START_M = 300;
+const SKITTISH_MAX = 0.5;       // no máximo metade dos passarinhos (a partir de ~1000 m)
 
 // Pulo alto: ~450px (em 480) e quase 1s subindo, então sobra bastante tempo no ar entre um passarinho e outro.
 const GRAVITY = 1100 * KS;    // px/s²
@@ -129,6 +156,7 @@ class Boot extends Phaser.Scene {
     for (const [kind, file] of Object.entries(BIRD_SHEETS)) {
       this.load.spritesheet(`${kind}Sheet`, file, { frameWidth: 32, frameHeight: 32 });
     }
+    this.load.spritesheet('hawkSheet', 'assets/hawk.png', { frameWidth: 64, frameHeight: 64 });
   }
 
   create() {
@@ -149,6 +177,8 @@ class Boot extends Phaser.Scene {
       });
       this.anims.create({ key: `${kind}Flee`, frameRate: 14, frames: this.anims.generateFrameNumbers(key, { start: 6, end: 11 }) });
     }
+    this.textures.get('hawkSheet').setFilter(Phaser.Textures.FilterMode.NEAREST);
+    this.anims.create({ key: 'hawkFly', frameRate: 14, repeat: -1, frames: this.anims.generateFrameNumbers('hawkSheet') });
     Poki.init().then(() => {
       Poki.loadingFinished();
       this.scene.start('Game');
@@ -192,12 +222,16 @@ class Game extends Phaser.Scene {
     this.frenzy = false;
     this.frenzyUntil = 0;
     this.trail = [];
+    this.hawks = [];           // falcões voando
+    this.hawkWarnings = [];    // avisos "!" de falcões que ainda vão entrar
+    this.nextHawkAt = 0;       // quando agendar o próximo falcão (0 = ainda não agendado)
+    this.knockUntil = 0;       // gato sendo empurrado pelo falcão (sem controle) até este instante
+    this.hawkSafeUntil = 0;    // protegido de outro acerto até este instante
 
     this.createBackground();
     this.createBestLine();
 
-    this.trailGfx =this.add.graphics().setDepth(4).setBlendMode(Phaser.BlendModes.ADD);
-    this.cat = this.add.sprite(W / 2, GROUND_Y - CAT_FOOT, 'catSheet', CAT.frame.sit0)
+    this.trailGfx = this.add.graphics().setDepth(4).setBlendMode(Phaser.BlendModes.ADD);    this.cat = this.add.sprite(W / 2, GROUND_Y - CAT_FOOT, 'catSheet', CAT.frame.sit0)
       .setScale(CAT_SCALE).setDepth(5);
     this.setFacing(1);
     this.cat.play('idle');
@@ -446,10 +480,12 @@ class Game extends Phaser.Scene {
     const top = this.cameras.main.scrollY - 300;
     while (this.nextY > top) {
       const height = GROUND_Y - this.nextY;
-      const diff = Math.min(height / DIFF_HEIGHT, 1); // 0 → 1 conforme sobe
+      const diff = Math.min(height / DIFF_HEIGHT, 1);                                   // fase 1: 0 → 1 até 500 m
+      const hard = Phaser.Math.Clamp((height - DIFF_HEIGHT) / HARD_HEIGHT, 0, 1);       // fase 2: 0 → 1 de 500 a 1500 m
+      const meters = height / PX_PER_METER;
 
       // Próximo passarinho longe do anterior, mas sempre alcançável.
-      const dxMax = DX_MAX * (0.55 + 0.45 * diff);
+      const dxMax = DX_MAX * (0.55 + 0.45 * diff + 0.15 * hard);
       const off = Phaser.Math.FloatBetween(dxMax * 0.35, dxMax);
       let x = this.lastX + (Math.random() < 0.5 ? -off : off);
       if (x < 40 || x > W - 40) x = this.lastX * 2 - x;
@@ -460,13 +496,21 @@ class Game extends Phaser.Scene {
       bird.baseX = x;
       bird.baseY = this.nextY;
       // A arte fica sempre no mesmo tamanho (pixel art nítida); lá no alto só a área de captura diminui.
-      bird.r = 17 * (1 - diff * 0.25);
-      // Mais alto, mais passarinhos voam de um lado para o outro.
-      bird.vx = Math.random() < diff * 0.8 ? Phaser.Math.FloatBetween(40, 110) * KS * (1 + diff) * (Math.random() < 0.5 ? -1 : 1) : 0;
+      bird.r = 17 * (1 - diff * 0.25 - hard * 0.1);
+      // Mais alto, mais passarinhos voam de um lado para o outro (e mais rápido).
+      const moveChance = Math.min(diff * 0.8 + hard * 0.15, 0.95);
+      bird.vx = Math.random() < moveChance
+        ? Phaser.Math.FloatBetween(40, 110) * KS * (1 + diff + hard * 0.6) * (Math.random() < 0.5 ? -1 : 1) : 0;
       this.face(bird, bird.vx ? Math.sign(bird.vx) : (Math.random() < 0.5 ? -1 : 1));
+      // Assustadiço: desvia para o lado quando o gato chega perto (bate as asas mais nervoso)
+      const skittishChance = Phaser.Math.Clamp((meters - SKITTISH_START_M) / 700, 0, 1) * SKITTISH_MAX;
+      if (Math.random() < skittishChance) {
+        bird.skittish = true;
+        bird.anims.timeScale = 1.6;
+      }
       this.birds.push(bird);
 
-      const gap = Phaser.Math.FloatBetween(GAP_MIN, GAP_MAX) + diff * GAP_GROW;
+      const gap = Phaser.Math.FloatBetween(GAP_MIN, GAP_MAX) + diff * GAP_GROW + hard * GAP_HARD;
       if (height > 1200 * KS && Math.random() < 0.06) this.spawnGolden(this.nextY - gap / 2);
       // Estrela do frenesi no meio do caminho entre este passarinho e o próximo (nunca durante um frenesi)
       if (!this.frenzy && this.nextY < this.nextOrbY) {
@@ -554,12 +598,19 @@ class Game extends Phaser.Scene {
     if (this.keys.RIGHT.isDown || this.keys.D.isDown) this.targetX = this.cat.x + 300;
     this.targetX = Phaser.Math.Clamp(this.targetX, 24, W - 24);
 
-    // Gato acelera até o alvo (com inércia, não teleporta)
-    const maxSpeed = this.state === 'ready' ? WALK_SPEED : CAT_SPEED;
-    const dx = this.targetX - this.cat.x;
-    const desired = Phaser.Math.Clamp(dx * 8, -maxSpeed, maxSpeed);
-    this.vx += (desired - this.vx) * Math.min(1, dt * 10);
-    this.cat.x = Phaser.Math.Clamp(this.cat.x + this.vx * dt, 24, W - 24);
+    // Gato acelera até o alvo (com inércia, não teleporta). Empurrado pelo falcão: sem controle por um
+    // instante, só deslizando para o lado e perdendo velocidade.
+    if (time < this.knockUntil) {
+      this.vx *= Math.max(0, 1 - dt * 2.5);
+    } else {
+      const maxSpeed = this.state === 'ready' ? WALK_SPEED : CAT_SPEED;
+      const dx = this.targetX - this.cat.x;
+      const desired = Phaser.Math.Clamp(dx * 8, -maxSpeed, maxSpeed);
+      this.vx += (desired - this.vx) * Math.min(1, dt * 10);
+    }
+    const nextX = this.cat.x + this.vx * dt;
+    this.cat.x = Phaser.Math.Clamp(nextX, 24, W - 24);
+    if (nextX !== this.cat.x && time < this.knockUntil) this.vx = 0; // bateu na borda: para
     if (Math.abs(this.vx) > 15) this.setFacing(Math.sign(this.vx));
 
     if (!this.onGround) {
@@ -587,6 +638,7 @@ class Game extends Phaser.Scene {
 
     for (const bird of this.birds) {
       if (bird.hit) continue;
+      if (bird.skittish && !bird.dodged && this.state === 'playing') this.maybeDodge(bird);
       if (bird.vx) {
         bird.baseX += bird.vx * dt;
         if (bird.baseX < 40 || bird.baseX > W - 40) {
@@ -613,6 +665,8 @@ class Game extends Phaser.Scene {
       orb.halo.setPosition(orb.x, orb.y);
       if (this.touches(orb, STAR_R)) this.catchOrb(orb);
     }
+
+    this.updateHawks(time, dt, t);
 
     // Câmera sobe com o gato. Enquanto o telhado ainda existe, ela também desce para mostrar o gato
     // voltando ao telhado; depois disso, só sobe.
@@ -691,6 +745,110 @@ class Game extends Phaser.Scene {
     this.facing = dir;
     this.cat.setFlipX(dir < 0);
     this.cat.setOrigin(dir < 0 ? 1 - CAT.originX : CAT.originX, CAT.originY);
+  }
+
+  // Passarinho assustadiço: quando o gato chega perto por baixo, dá um pulinho para o lado (uma vez só).
+  maybeDodge(bird) {
+    const dx = bird.x - this.cat.x;
+    const dy = bird.y - this.cat.y;
+    if (dy > 10 || dy < -130 * KS || Math.abs(dx) > 110 * KS) return;
+    bird.dodged = true;
+    let dir = Math.sign(dx) || (Math.random() < 0.5 ? -1 : 1);
+    const dist = Phaser.Math.FloatBetween(70, 100) * KS;
+    if (bird.baseX + dir * dist < 40 || bird.baseX + dir * dist > W - 40) dir = -dir; // perto da parede: vai para o outro lado
+    this.face(bird, dir);
+    this.tweens.add({ targets: bird, baseX: Phaser.Math.Clamp(bird.baseX + dir * dist, 40, W - 40), duration: 260, ease: 'Cubic.easeOut' });
+    this.dots.explode(4, bird.x, bird.y);
+    const alert = pixelText(this, bird.x, bird.y - 26, '!', 2, 0xffffff).setOrigin(0.5).setDepth(7);
+    this.tweens.add({ targets: alert, y: alert.y - 14, alpha: 0, duration: 450, onComplete: () => alert.destroy() });
+  }
+
+  // Falcões: a partir de HAWK_START_M, de tempos em tempos um "!" vermelho pisca na borda da tela e,
+  // depois do aviso, o falcão atravessa na altura do aviso. Fica mais frequente e rápido lá no alto.
+  updateHawks(time, dt, t) {
+    if (this.state !== 'playing') return;
+    const meters = (GROUND_Y - CAT_FOOT - this.cat.y) / PX_PER_METER;
+    const k = Phaser.Math.Clamp((meters - HAWK_START_M) / 1000, 0, 1);
+
+    if (meters >= HAWK_START_M && !this.frenzy) {
+      if (!this.nextHawkAt) {
+        this.nextHawkAt = time + 1500;
+      } else if (time >= this.nextHawkAt) {
+        this.warnHawk(time);
+        const every = Phaser.Math.Linear(HAWK_EVERY_S[0], HAWK_EVERY_S[1], k);
+        this.nextHawkAt = time + every * 1000 * Phaser.Math.FloatBetween(0.8, 1.2);
+      }
+    }
+
+    // Avisos que chegaram ao fim: entra o falcão
+    this.hawkWarnings = this.hawkWarnings.filter((w) => {
+      if (time < w.at) return true;
+      w.sign.destroy();
+      this.spawnHawk(w.side, this.cameras.main.scrollY + w.screenY, k);
+      return false;
+    });
+
+    for (const hawk of this.hawks) {
+      hawk.x += hawk.vx * dt;
+      hawk.y = hawk.baseY + Math.sin(t * 5 + hawk.phase) * 8;
+      hawk.aura.setPosition(hawk.x, hawk.y);
+      if (!hawk.hit && !this.frenzy && this.now >= this.hawkSafeUntil && this.touches(hawk, HAWK_R)) this.hitByHawk(hawk);
+    }
+  }
+
+  warnHawk(time) {
+    const side = Math.random() < 0.5 ? -1 : 1; // -1 = entra pela esquerda
+    const screenY = H * Phaser.Math.FloatBetween(0.22, 0.48); // acima do gato, onde ele vai passar
+    const sign = pixelText(this, side < 0 ? 22 : W - 22, screenY, '!', 5, 0xff5a4a)
+      .setOrigin(0.5).setScrollFactor(0).setDepth(25);
+    this.tweens.add({ targets: sign, alpha: 0.25, scale: 6, duration: 180, yoyo: true, repeat: -1 });
+    this.hawkWarnings.push({ side, screenY, sign, at: time + HAWK_WARN_MS });
+    Sfx.hawkWarn();
+  }
+
+  spawnHawk(side, y, k) {
+    const hawk = this.add.sprite(side < 0 ? -40 : W + 40, y, 'hawkSheet').setDepth(4).setScale(HAWK_SCALE).play('hawkFly');
+    hawk.setFlipX(side > 0); // os quadros olham para a direita
+    hawk.vx = -side * Phaser.Math.Linear(HAWK_SPEED[0], HAWK_SPEED[1], k) * KS;
+    hawk.baseY = y;
+    hawk.phase = Math.random() * TAU;
+    hawk.hit = false;
+    // Brilho vermelho em volta: deixa claro que é perigo, não um passarinho
+    hawk.aura = this.add.image(hawk.x, y, 'orb').setDepth(3).setTint(0xff3b30).setAlpha(0.55)
+      .setScale(1.5).setBlendMode(Phaser.BlendModes.ADD);
+    hawk.on('destroy', () => hawk.aura.destroy());
+    this.hawks.push(hawk);
+  }
+
+  // Falcão acertou: empurra o gato para o lado (na direção em que o falcão voa) com um pulinho, tira o
+  // controle por um instante e zera o combo. Ele continua podendo pegar passarinhos, então dá para se
+  // recuperar. Por um momento não leva outro acerto.
+  hitByHawk(hawk) {
+    hawk.hit = true;
+    this.knockUntil = this.now + KNOCK_MS;
+    this.hawkSafeUntil = this.now + HAWK_SAFE_MS;
+    this.vx = Math.sign(hawk.vx) * KNOCK_SPEED;
+    this.vy = Math.min(this.vy, KNOCK_HOP); // se já estava subindo mais rápido, mantém
+    this.onGround = false;
+    this.combo = 0;
+    this.updateCombo();
+    Sfx.hawkHit();
+    this.cameras.main.shake(180, 0.008);
+    this.dots.explode(12, this.cat.x, this.cat.y);
+    this.flashCat();
+  }
+
+  // Pisca em branco algumas vezes (entre as piscadas o gato aparece normal, olho amarelo)
+  flashCat() {
+    let n = 0;
+    this.time.addEvent({
+      delay: 70, repeat: 7,
+      callback: () => {
+        n++;
+        if (n % 2) this.cat.setTintFill(0xffffff);
+        else this.cat.clearTint();
+      },
+    });
   }
 
   // Rastro de luz suave: linha que afina e some atrás do gato (roxo e mais forte no frenesi).
@@ -834,8 +992,9 @@ class Game extends Phaser.Scene {
     this.scoreText.setText(String(this.score));
     // Só reinicia o "pulo" do placar (não mexe no fade de entrada do placar)
     if (this.scoreBump) this.scoreBump.stop();
-    this.scoreText.setScale(4.6);
-    this.scoreBump = this.tweens.add({ targets: this.scoreText, scale: 4, duration: 160, ease: 'Quad.easeOut' });
+    const base = this.score >= 1e6 ? 3 : 4; // a partir de 7 dígitos fica menor para não encostar no "FRENZY"
+    this.scoreText.setScale(base * 1.15);
+    this.scoreBump = this.tweens.add({ targets: this.scoreText, scale: base, duration: 160, ease: 'Quad.easeOut' });
 
     const txt = pixelText(this, x + Phaser.Math.Between(-8, 8), y, label, size * 0.4, tint)
       .setOrigin(0.5).setDepth(8);
@@ -856,10 +1015,17 @@ class Game extends Phaser.Scene {
     this.birds = this.birds.filter(keep);
     this.goldens = this.goldens.filter(keep);
     this.orbs = this.orbs.filter(keep);
+    // Falcão continua voando mesmo depois de acertar: some só quando sai da tela
+    this.hawks = this.hawks.filter((h) => {
+      if (h.y > bottom || h.x < -90 || h.x > W + 90) { h.destroy(); return false; }
+      return true;
+    });
   }
 
   gameOver() {
     this.state = 'over';
+    this.hawkWarnings.forEach((w) => w.sign.destroy());
+    this.hawkWarnings = [];
     Poki.gameplayStop();
     Sfx.meow();
     Music.setIntense(false);

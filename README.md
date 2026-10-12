@@ -93,6 +93,33 @@ Não aparecem estrelas durante um frenesi, então não dá para emendar um no ou
 Ajustes: `FRENZY_MS`, `FRENZY_BOUNCE_VY`, `FRENZY_MULT`, `ORB_EVERY`, `STAR_R` (raio de coleta),
 `FRENZY_COLOR` e `STAR_PARTICLES` (cores) em `src/game.js`.
 
+## Dificuldade
+
+Sobe com a altura, em duas fases (`src/game.js`):
+
+- **0 → 500 m** (`DIFF_HEIGHT`): passarinhos mais distantes entre si, área de captura menor e cada vez
+  mais deles voando de um lado para o outro.
+- **500 → 1500 m** (`HARD_HEIGHT`): continua apertando: distância vertical extra (`GAP_HARD`, ainda
+  alcançável com folga), mais passarinhos em movimento e mais rápidos, área de captura um pouco menor.
+
+Perigos e truques:
+
+- **Falcão** (a partir de 150 m, `HAWK_*`): um "!" vermelho pisca na borda da tela por 1,5 s e depois
+  o falcão atravessa naquela altura, com um brilho vermelho em volta. Fica mais frequente (de ~9 s
+  para ~3,5 s entre um e outro) e mais rápido até 1150 m. Encostar nele **empurra o gato para o
+  lado** (na direção em que o falcão voa) com um pulinho, tira o controle por 0,55 s, zera o combo
+  e o gato pisca em branco; depois disso ele fica 1 s protegido de outro acerto. Dá para se
+  recuperar (continua pegando passarinhos durante o empurrão). Ajuste da punição em `KNOCK_MS` e
+  `KNOCK_HOP` (no código há a tabela do teste: com o bot de mira perfeita, 83% dos acertos são
+  recuperáveis). No frenesi o gato é imune e não aparecem falcões novos. Arte em `assets/hawk.png` (6 quadros
+  de 64×64 voando, usada como veio), mostrada em 1,5× (`HAWK_SCALE`).
+- **Passarinhos assustadiços** (a partir de 300 m, até metade deles perto de 1000 m,
+  `SKITTISH_*`): batem as asas mais rápido e, quando o gato chega perto por baixo, dão um pulinho
+  para o lado (com um "!" e penas). Ainda dá para pegar, mas exige ajustar a direção.
+
+Teste com bot de mira perfeita: sem falcão ele passa de 1.700 m (a fase difícil é alcançável);
+com falcão (o bot não desvia), a altura mediana cai para ~1.570 m.
+
 ## Altura e linha de recorde
 
 A altura é contada em metros (1 m = 40 px na escala de 480, `PX_PER_METER`; um passarinho fica a
@@ -212,6 +239,11 @@ O script `tools/build_cat_sheet.py` separa os quadros (mesmo quando o rabo de um
 vizinho), alinha todos para o gato não tremer (patas na mesma linha, frente do gato na mesma coluna;
 no ar, centro de massa no mesmo ponto) e gera `assets/cat.png` + `assets/cat.json`.
 
+O script também desenha um **contorno branco de 1 pixel** em volta do gato, na grade da arte, para ele
+não sumir no céu e no telhado escuros no celular. `OUTLINE` muda a cor (ou `None` tira o contorno) e
+`OUTLINE_DIAGONALS` escolhe entre o contorno contínuo (com as quinas, o atual) e o mais leve (só pelas
+laterais).
+
 ```bash
 pip install pillow numpy
 ```
@@ -241,6 +273,7 @@ Os números de dificuldade ficam no topo de `src/game.js`:
 | `src/ui.js` | Textos do jogo, fonte em pixel art, logo e patinha |
 | `assets/cat.png`, `assets/cat.json` | Spritesheet do gato e suas medidas (geradas por `tools/build_cat_sheet.py`) |
 | `assets/bird.png`, `bird-gold.png`, `bird-bonus.png` | Passarinhos normal, dourado e lilás (gerados por `tools/build_bird_sheets.py`) |
+| `assets/hawk.png` | Falcão voando (usado como veio) |
 | `assets/star-spin.png`, `assets/star-collect.png` | Estrela do frenesi girando e explodindo ao ser coletada (usadas como vieram) |
 | `assets/source/` | Tiras originais do gato e dos passarinhos |
 | `tools/build_cat_sheet.py` | Monta a spritesheet do gato a partir das tiras |
